@@ -1,0 +1,2 @@
+source /home/des/Documents/GitHub/AS3935-ESP32/build/gdbinit/symbols
+source /home/des/Documents/GitHub/AS3935-ESP32/build/gdbinit/connect
