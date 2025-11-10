@@ -111,6 +111,34 @@ static httpd_uri_t as3935_params_uri = {
     .user_ctx = NULL
 };
 
+static httpd_uri_t as3935_calibrate_start_uri = {
+    .uri = "/api/as3935/calibrate",
+    .method = HTTP_POST,
+    .handler = as3935_calibrate_start_handler,
+    .user_ctx = NULL
+};
+
+static httpd_uri_t as3935_calibrate_status_uri = {
+    .uri = "/api/as3935/calibrate/status",
+    .method = HTTP_GET,
+    .handler = as3935_calibrate_status_handler,
+    .user_ctx = NULL
+};
+
+static httpd_uri_t as3935_calibrate_cancel_uri = {
+    .uri = "/api/as3935/calibrate/cancel",
+    .method = HTTP_POST,
+    .handler = as3935_calibrate_cancel_handler,
+    .user_ctx = NULL
+};
+
+static httpd_uri_t as3935_calibrate_apply_uri = {
+    .uri = "/api/as3935/calibrate/apply",
+    .method = HTTP_POST,
+    .handler = as3935_calibrate_apply_handler,
+    .user_ctx = NULL
+};
+
 static httpd_uri_t as3935_reg_uri = {
     .uri = "/api/as3935/reg",
     .method = HTTP_GET,
@@ -214,6 +242,10 @@ void app_main(void)
         httpd_register_uri_handler(server, &as3935_pins_save_uri);
         httpd_register_uri_handler(server, &as3935_pins_status_uri);
     httpd_register_uri_handler(server, &as3935_params_uri);
+    httpd_register_uri_handler(server, &as3935_calibrate_start_uri);
+    httpd_register_uri_handler(server, &as3935_calibrate_status_uri);
+    httpd_register_uri_handler(server, &as3935_calibrate_cancel_uri);
+    httpd_register_uri_handler(server, &as3935_calibrate_apply_uri);
         httpd_register_uri_handler(server, &as3935_reg_uri);
         httpd_register_uri_handler(server, &sse_uri);
         httpd_register_uri_handler(server, &index_uri);

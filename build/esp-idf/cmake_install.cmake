@@ -554,6 +554,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/cjson_shim/cmake_install.cmake")
 endif()
 

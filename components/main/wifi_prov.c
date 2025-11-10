@@ -1,20 +1,27 @@
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
+
+#include "esp_system.h"
 #include <esp_wifi.h>
 #include <esp_event.h>
 #include <esp_log.h>
+#include "esp_netif.h"
+
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
+#include "lwip/apps/sntp.h"
+
 #include "settings.h"
 #include "wifi_prov.h"
 #include "cJSON.h"
 #include "http_helpers.h"
-#include "esp_netif.h"
-#include "lwip/sockets.h"
-#include "lwip/netdb.h"
-#include "esp_system.h"
 
 static const char *TAG = "wifi_prov";
 static TaskHandle_t captive_dns_task = NULL;
 static TaskHandle_t wifi_reconnect_task_handle = NULL;
+static TaskHandle_t sntp_task_handle = NULL;
 static esp_netif_t *s_sta_netif = NULL;
 static int s_retry_num = 0;
 static const int MAX_RETRY = 5;
@@ -24,6 +31,8 @@ static bool s_ap_active = false;
 // Forward declaration of connect task
 static void wifi_connect_task(void *arg);
 static void wifi_reconnect_task(void *arg);
+static void initialize_sntp(void);
+static void sntp_resync_task(void *arg);
 
 // DNS responder: craft a simple DNS A response mapping any query to 192.168.4.1
 static void captive_dns_task_fn(void *arg)
@@ -98,6 +107,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         s_retry_num = 0;
         s_connected = true;
         ESP_LOGI(TAG, "Got IP: %s", ip4addr_ntoa((const ip4_addr_t*)&ev->ip_info.ip));
+        /* Initialize SNTP when we have a network connection and an IP address. */
+        initialize_sntp();
         // If AP fallback was active, disable AP to return to STA-only operation
         if (s_ap_active) {
             ESP_LOGI(TAG, "Stopping fallback AP, returning to STA-only mode");
@@ -156,7 +167,45 @@ esp_err_t wifi_prov_start_ap(const char *ap_ssid)
     if (err == ESP_OK) err = esp_wifi_start();
     if (err == ESP_OK) s_ap_active = true;
     ESP_LOGI(TAG, "Started AP '%s' (err=%d)", ap_ssid, err);
+    // Start captive DNS so clients get the captive-portal UX immediately
+    if (err == ESP_OK) {
+        start_captive_dns();
+    }
     return err;
+}
+
+// Initialize SNTP (NTP) client, point at pool.ntp.org by default.
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_stop();
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+#if defined(CONFIG_LWIP_SNTP_UPDATE_DELAY)
+    /* If LWIP SNTP sync interval is configurable, leave it; otherwise we
+       schedule an explicit resync task below. */
+#endif
+    sntp_init();
+
+    /* Start a background task to restart SNTP every 12 hours to limit drift. */
+    if (sntp_task_handle == NULL) {
+        xTaskCreate(sntp_resync_task, "sntp_resync", 4096, NULL, 5, &sntp_task_handle);
+    }
+}
+
+static void sntp_resync_task(void *arg)
+{
+    (void)arg;
+    const TickType_t delay = pdMS_TO_TICKS(12 * 60 * 60 * 1000UL); // 12 hours
+    while (1) {
+        vTaskDelay(delay);
+        ESP_LOGI(TAG, "SNTP resync: restarting SNTP to reduce clock drift");
+        sntp_stop();
+        /* reconfigure server in case configuration was changed elsewhere */
+        sntp_setservername(0, "pool.ntp.org");
+        sntp_init();
+    }
+    vTaskDelete(NULL);
 }
 
 void wifi_prov_start_connect_with_fallback(void)
@@ -187,13 +236,16 @@ esp_err_t wifi_status_handler(httpd_req_t *req)
 {
     char ssid[64] = {0};
     settings_load_str("wifi", "ssid", ssid, sizeof(ssid));
+    char pwd[64] = {0};
+    settings_load_str("wifi", "password", pwd, sizeof(pwd));
     char buf[256];
+    int pwd_set = pwd[0] ? 1 : 0;
     if (s_connected && s_sta_netif) {
         esp_netif_ip_info_t ip_info;
         esp_netif_get_ip_info(s_sta_netif, &ip_info);
-        snprintf(buf, sizeof(buf), "{\"connected\":true, \"ssid\":\"%s\", \"ip\":\"%s\"}", ssid, ip4addr_ntoa((const ip4_addr_t*)&ip_info.ip));
+        snprintf(buf, sizeof(buf), "{\"connected\":true, \"ssid\":\"%s\", \"ip\":\"%s\", \"password_set\":%s}", ssid, ip4addr_ntoa((const ip4_addr_t*)&ip_info.ip), pwd_set?"true":"false");
     } else {
-        snprintf(buf, sizeof(buf), "{\"connected\":false, \"ssid\":\"%s\"}", ssid);
+        snprintf(buf, sizeof(buf), "{\"connected\":false, \"ssid\":\"%s\", \"password_set\":%s}", ssid, pwd_set?"true":"false");
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, buf);

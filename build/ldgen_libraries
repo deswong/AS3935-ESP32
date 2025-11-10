@@ -149,5 +149,6 @@
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/spiffs/libspiffs.a
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/json/libjson.a
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/libas3935_test.a
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/cjson_shim/libcjson_shim.a
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/main/libmain.a

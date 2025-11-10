@@ -827,6 +827,13 @@
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/wifi_provisioning/CMakeFiles/install.dir
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/wifi_provisioning/CMakeFiles/install/local.dir
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/wifi_provisioning/CMakeFiles/install/strip.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/__idf_as3935_test.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/edit_cache.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/rebuild_cache.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/list_install_components.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/install.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/install/local.dir
+/home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/as3935_test/CMakeFiles/install/strip.dir
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/cjson_shim/CMakeFiles/__idf_cjson_shim.dir
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/cjson_shim/CMakeFiles/edit_cache.dir
 /home/des/Documents/GitHub/AS3935-ESP32/build/esp-idf/cjson_shim/CMakeFiles/rebuild_cache.dir
