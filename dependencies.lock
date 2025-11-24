@@ -1,0 +1,17 @@
+dependencies:
+  esp_type_utils:
+    dependencies: []
+    source:
+      path: D:\AS3935-ESP32\components\esp_type_utils
+      type: local
+    version: 0.1.0
+  idf:
+    source:
+      type: idf
+    version: 6.0.0
+direct_dependencies:
+- esp_type_utils
+- idf
+manifest_hash: 2ad537065d8ceac3915a33144a96e9e9fc575c9f172a354a522f73f59ce07cfc
+target: esp32c3
+version: 2.0.0

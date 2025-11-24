@@ -1,0 +1,8 @@
+# Default minimal sdkconfig settings
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# Use USB Serial JTAG for console (recommended on many devkit boards)
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Disable forcing a GPIO-based UART console (leave defaults)
+# If you prefer a UART console on pins, set CONFIG_ESP_CONSOLE_UART_NUM appropriately instead.
