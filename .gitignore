@@ -48,6 +48,9 @@ web_index.h
 compile_commands.json
 
 # Temporary files
+
+# Documentation archive (development notes, not for release)
+docs/archive/
 *.tmp
 *.temp
 *.bak
