@@ -342,7 +342,15 @@ esp_err_t wifi_scan_handler(httpd_req_t *req)
     }
     
     int offset = 0;
-    offset += snprintf(buffer + offset, 8192 - offset, "[");
+    int n = snprintf(buffer + offset, 8192 - offset, "[");
+    if (n < 0 || n >= 8192 - offset) {
+        // Truncated or error
+        free(ap_list);
+        http_helpers_send_500(req);
+        free(buffer);
+        return ESP_FAIL;
+    }
+    offset += n;
     
     for (int i = 0; i < ap_count && offset < 8000; i++) {
         // Escape quotes in SSID
@@ -355,13 +363,36 @@ esp_err_t wifi_scan_handler(httpd_req_t *req)
             ssid_escaped[j++] = ap_list[i].ssid[k];
         }
         
-        if (i > 0) offset += snprintf(buffer + offset, 8192 - offset, ",");
-        offset += snprintf(buffer + offset, 8192 - offset, 
-            "{\"ssid\":\"%s\",\"rssi\":%d,\"channel\":%d}",
-            ssid_escaped, ap_list[i].rssi, ap_list[i].primary);
+        if (i > 0) {
+            n = snprintf(buffer + offset, 8192 - offset, ",");
+            if (n < 0 || n >= 8192 - offset) {
+                free(ap_list);
+                http_helpers_send_500(req);
+                free(buffer);
+                return ESP_FAIL;
+            }
+            offset += n;
+        }
+        n = snprintf(buffer + offset, 8192 - offset, 
+                "{\"ssid\":\"%s\",\"rssi\":%d,\"channel\":%d}",
+                ssid_escaped, ap_list[i].rssi, ap_list[i].primary);
+        if (n < 0 || n >= 8192 - offset) {
+            free(ap_list);
+            http_helpers_send_500(req);
+            free(buffer);
+            return ESP_FAIL;
+        }
+        offset += n;
     }
     
-    offset += snprintf(buffer + offset, 8192 - offset, "]");
+    n = snprintf(buffer + offset, 8192 - offset, "]");
+    if (n < 0 || n >= 8192 - offset) {
+        free(ap_list);
+        http_helpers_send_500(req);
+        free(buffer);
+        return ESP_FAIL;
+    }
+    offset += n;
     
     free(ap_list);
     
