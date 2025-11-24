@@ -27,6 +27,14 @@ static int s_retry_num = 0;
 static const int MAX_RETRY = 5;
 static bool s_connected = false;
 static bool s_ap_active = false;
+static bool s_fallback_to_ap_triggered = false;  // Track if we already started AP fallback
+
+// Register/set the STA netif that was created elsewhere (e.g., in app_main)
+void wifi_prov_register_sta_netif(esp_netif_t *sta_netif)
+{
+    s_sta_netif = sta_netif;
+    ESP_LOGI(TAG, "Registered STA netif for APSTA mode support");
+}
 
 // Forward declaration of connect task
 static void wifi_connect_task(void *arg);
@@ -92,7 +100,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
             esp_wifi_connect();
             s_retry_num++;
             ESP_LOGI(TAG, "Retrying to connect (%d/%d)", s_retry_num, MAX_RETRY);
-        } else {
+        } else if (!s_fallback_to_ap_triggered) {
+            s_fallback_to_ap_triggered = true;
             ESP_LOGW(TAG, "Max retries reached, falling back to AP");
             // Start AP without stopping STA so we can continue reconnect attempts in background
             wifi_prov_start_ap("AS3935-Setup");
@@ -142,10 +151,42 @@ static void wifi_reconnect_task(void *arg)
     vTaskDelete(NULL);
 }
 
+// Watchdog task to detect if WiFi is stuck in state machine loop without triggering disconnect events
+static TaskHandle_t wifi_timeout_task_handle = NULL;
+static void wifi_connect_timeout_task(void *arg)
+{
+    (void)arg;
+    // Wait up to 15 seconds for connection or disconnect event
+    int timeout_ms = 15000;
+    int check_interval_ms = 1000;
+    int elapsed = 0;
+    
+    while (elapsed < timeout_ms && !s_connected && !s_fallback_to_ap_triggered) {
+        vTaskDelay(pdMS_TO_TICKS(check_interval_ms));
+        elapsed += check_interval_ms;
+    }
+    
+    // If we timed out (didn't connect and didn't get disconnect event), force fallback
+    if (!s_connected && !s_fallback_to_ap_triggered) {
+        ESP_LOGW(TAG, "WiFi connection timeout (%d ms) - forcing fallback to AP", timeout_ms);
+        s_fallback_to_ap_triggered = true;
+        wifi_prov_start_ap("AS3935-Setup");
+        start_captive_dns();
+        if (wifi_reconnect_task_handle == NULL) {
+            xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 4096, NULL, 5, &wifi_reconnect_task_handle);
+        }
+    }
+    
+    // clear handle and exit
+    wifi_timeout_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
 esp_err_t wifi_prov_init(void)
 {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // NOTE: esp_netif_init() and esp_event_loop_create_default() are called from app_main
+    // DO NOT reinitialize them here - it causes undefined behavior in ESP-IDF v6
+    // Only register event handlers here
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL));
     return ESP_OK;
@@ -218,10 +259,14 @@ void wifi_prov_start_connect_with_fallback(void)
     }
     settings_load_str("wifi", "password", password, sizeof(password));
 
-    s_sta_netif = esp_netif_create_default_wifi_sta();
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    // STA netif must already be created by app_main and registered via wifi_prov_register_sta_netif
+    if (!s_sta_netif) {
+        ESP_LOGW(TAG, "STA netif not registered! Did app_main call wifi_prov_register_sta_netif?");
+        return;
+    }
+    
+    // Set STA mode (don't call esp_wifi_init again - it's already called from app_main)
+    esp_wifi_set_mode(WIFI_MODE_STA);
 
     wifi_config_t wifi_config = {0};
     strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid)-1);
@@ -230,6 +275,12 @@ void wifi_prov_start_connect_with_fallback(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
     s_retry_num = 0;
+    
+    // Start timeout task to detect if connection gets stuck in state machine
+    if (wifi_timeout_task_handle == NULL) {
+        xTaskCreate(wifi_connect_timeout_task, "wifi_timeout", 2048, NULL, 5, &wifi_timeout_task_handle);
+        ESP_LOGI(TAG, "Started WiFi connection timeout watchdog (15s)");
+    }
 }
 
 esp_err_t wifi_status_handler(httpd_req_t *req)
@@ -249,6 +300,75 @@ esp_err_t wifi_status_handler(httpd_req_t *req)
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, buf);
+    return ESP_OK;
+}
+
+esp_err_t wifi_scan_handler(httpd_req_t *req)
+{
+    // Start WiFi scan
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+    };
+    
+    esp_wifi_scan_start(&scan_config, true);  // blocking scan
+    
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    
+    if (ap_count == 0) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "[]");
+        return ESP_OK;
+    }
+    
+    wifi_ap_record_t *ap_list = malloc(sizeof(wifi_ap_record_t) * ap_count);
+    if (!ap_list) {
+        http_helpers_send_500(req);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_list));
+    
+    // Build JSON manually to avoid cJSON compatibility issues
+    char *buffer = malloc(8192);
+    if (!buffer) {
+        free(ap_list);
+        http_helpers_send_500(req);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    int offset = 0;
+    offset += snprintf(buffer + offset, 8192 - offset, "[");
+    
+    for (int i = 0; i < ap_count && offset < 8000; i++) {
+        // Escape quotes in SSID
+        char ssid_escaped[65] = {0};
+        int j = 0;
+        for (int k = 0; k < 32 && ap_list[i].ssid[k] && j < 63; k++) {
+            if (ap_list[i].ssid[k] == '"' || ap_list[i].ssid[k] == '\\') {
+                ssid_escaped[j++] = '\\';
+            }
+            ssid_escaped[j++] = ap_list[i].ssid[k];
+        }
+        
+        if (i > 0) offset += snprintf(buffer + offset, 8192 - offset, ",");
+        offset += snprintf(buffer + offset, 8192 - offset, 
+            "{\"ssid\":\"%s\",\"rssi\":%d,\"channel\":%d}",
+            ssid_escaped, ap_list[i].rssi, ap_list[i].primary);
+    }
+    
+    offset += snprintf(buffer + offset, 8192 - offset, "]");
+    
+    free(ap_list);
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, buffer);
+    free(buffer);
+    
     return ESP_OK;
 }
 
@@ -303,7 +423,10 @@ static void wifi_connect_task(void *arg)
     }
     settings_load_str("wifi", "password", password, sizeof(password));
 
-    s_sta_netif = esp_netif_create_default_wifi_sta();
+    // Create STA netif only if not already created
+    if (!s_sta_netif) {
+        s_sta_netif = esp_netif_create_default_wifi_sta();
+    }
     esp_netif_t *netif = s_sta_netif;
 
     esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);

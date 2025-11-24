@@ -1,0 +1,10 @@
+## IDF Project Manifest
+## This file defines project-level information and dependencies for ESP-IDF projects
+metadata:
+  version: "1.0.0"
+  description: "AS3935 ESP32 Lightning Detector with I2C Interface"
+  url: "https://github.com/deswong/AS3935-ESP32"
+
+dependencies:
+  k0i05/esp_as3935:
+    version: "^1.2.7"

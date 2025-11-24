@@ -16,6 +16,7 @@ typedef struct {
 
 esp_err_t mqtt_init(const mqtt_config_t *cfg);
 esp_err_t mqtt_publish(const char *topic, const char *payload);
+bool mqtt_is_connected(void);
 void mqtt_stop(void);
 
 /* HTTP handlers */

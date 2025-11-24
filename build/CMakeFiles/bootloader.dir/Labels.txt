@@ -1,13 +1,13 @@
 # Target labels
  bootloader
 # Source files and their labels
-/home/des/Documents/GitHub/AS3935-ESP32/build/CMakeFiles/bootloader
-/home/des/Documents/GitHub/AS3935-ESP32/build/CMakeFiles/bootloader.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/CMakeFiles/bootloader-complete.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
-/home/des/Documents/GitHub/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
+D:/AS3935-ESP32/build/CMakeFiles/bootloader
+D:/AS3935-ESP32/build/CMakeFiles/bootloader.rule
+D:/AS3935-ESP32/build/CMakeFiles/bootloader-complete.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+D:/AS3935-ESP32/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

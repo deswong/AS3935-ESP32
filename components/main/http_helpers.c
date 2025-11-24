@@ -12,3 +12,12 @@ esp_err_t http_helpers_send_500(httpd_req_t *req)
     httpd_resp_set_type(req, "text/plain");
     return httpd_resp_sendstr(req, "Internal Server Error\n");
 }
+
+esp_err_t http_reply_json(httpd_req_t *req, const char *json)
+{
+    if (!json) {
+        return http_helpers_send_400(req);
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}

@@ -1,61 +1,121 @@
 # AS3935 Lightning Monitor for ESP32
 
-Lightweight ESP32 firmware to read an AS3935 lightning detector, provide a tiny web UI for provisioning and device settings, and publish lightning events to an MQTT broker.
+Lightweight ESP32 firmware to read an AS3935 lightning detector via I2C, provide a web UI for provisioning and sensor configuration, and publish lightning events to an MQTT broker.
 
-Overview
-- Built with ESP-IDF. Provides a single-file embedded web UI for provisioning and configuration, NVS persistence for settings, MQTT publishing and a compact AS3935 driver.
+## Overview
 
-Quick prerequisites
-- ESP-IDF 5.x installed and your environment exported (source $IDF_PATH/export.sh)
-- Target device: ESP32 (this repo defaults to `esp32c3` in sdkconfig)
+- **Built with ESP-IDF v6.0** 
+- **Single-file embedded web UI** for provisioning, configuration, and sensor tuning
+- **I2C communication** to AS3935 lightning detector (configurable address: 0x03, 0x02, 0x01, or custom)
+- **NVS persistence** for all settings
+- **MQTT publishing** for lightning events
+- **REST API** for remote sensor control
 
-Build and flash (short)
+## Quick Prerequisites
+
+- **ESP-IDF 5.x or 6.x** installed and environment exported (`source $IDF_PATH/export.sh`)
+- **Target device**: ESP32-C3 (configurable via `idf.py set-target`)
+- **AS3935 module** with I2C interface
+
+## Build and Flash
+
 ```bash
+# Set target (if not already ESP32-C3)
 idf.py set-target esp32c3
+
+# Clean build
 idf.py fullclean build
+
+# Flash and monitor
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-Wiring & pins (suggested defaults)
-These are example pins used by the default UI and NVS settings. Adjust in the UI or NVS as required by your board.
+## Wiring & Pins
 
-SPI wiring (recommended)
+The firmware uses I2C for communication. Pin assignments are configurable via the web UI.
 
- - SPI host: 1 (or other available host)
- - SCLK pin: 14
- - MOSI pin: 13
- - MISO pin: 12 (optional depending on adapter)
- - CS pin: 15
- - IRQ pin: 10 (AS3935 interrupt output)
- - VCC: 3.3V
- - GND: GND
+### Default I2C Pins (ESP32-C3)
 
-Note: Use SPI where possible for reliability. The firmware accepts both legacy I2C-style pin saves and the newer SPI mapping via the `AS3935 -> Pins` page.
+| Function | GPIO Pin | Notes |
+|----------|----------|-------|
+| I2C SDA (Data) | GPIO 7 | I2C data line (configurable) |
+| I2C SCL (Clock) | GPIO 4 | I2C clock line (configurable) |
+| IRQ (Interrupt) | GPIO 0 | Lightning detection interrupt (configurable) |
+| VCC (Power) | 3.3V | AS3935 requires 3.3V |
+| GND (Ground) | GND | Common ground |
 
-What the JSON AS3935 register config is for
-- The web UI and `/api/as3935/save` endpoint accept a JSON object that maps register addresses to byte values. This allows manual configuration of the AS3935 internal registers (gain, thresholds, masks, etc.) without rebuilding firmware.
-- Format: a JSON object where keys are register addresses (hex like `"0x03"` or decimal like `"3"`) and values are integers 0–255.
+### I2C Address
 
-REST endpoints (short)
-- GET  /api/wifi/status
-- POST /api/wifi/save
-- POST /api/mqtt/save
-- GET  /api/mqtt/status
- - POST /api/as3935/save
- - GET  /api/as3935/status
- - GET  /api/events/stream (SSE)
+- **Default Address**: `0x03` (typical for most AS3935 modules)
+- **Alternative Addresses**: `0x02`, `0x01` (check your module documentation)
+- **Custom Addresses**: Any value 0x00-0xFF (configurable via web UI)
 
-Time synchronization (SNTP / NTP)
-- The firmware synchronizes its system clock using SNTP once it obtains a Wi‑Fi connection and an IP address. After the device gets an IP (`IP_EVENT_STA_GOT_IP`) the SNTP client is initialized and will obtain wall-clock time from `pool.ntp.org` by default.
-- The device runs a background resync task that restarts SNTP every 12 hours to reduce clock drift. For tighter accuracy, configure a local NTP server on your LAN.
-- If events occur before time is synced, event payloads always include a monotonic `uptime_ms` (milliseconds since boot) and a `time_ok` flag indicating whether wall-clock timestamps are valid.
-
-MQTT payload (recommended schema)
-Use compact JSON to keep payloads small. Send both a monotonic uptime and an optional wall-clock timestamp when available. Include a sequence number for ordering and a small error estimate when applicable.
-
-Example payload (when time is synced):
+### Hardware Connection Example
 
 ```
+AS3935 Module        ESP32-C3
+─────────────       ──────────
+VCC (3.3V)    ──→   3.3V
+GND           ──→   GND
+SDA           ──→   GPIO 7 (I2C1_SDA)
+SCL           ──→   GPIO 4 (I2C1_SCL)
+IRQ           ──→   GPIO 0
+```
+
+**Note**: I2C pull-ups (typically 10kΩ to 47kΩ) may be needed if not included on the AS3935 module.
+
+## Configuration
+
+All configuration is done via the web UI. **No code changes needed!**
+
+### Via Web UI
+
+1. Build and flash the firmware
+2. Connect to the device's provisioning AP
+3. Enter Wi-Fi and MQTT credentials
+4. Configure I2C address and pins (if needed)
+5. Adjust sensor sensitivity via the **Advanced Settings** page
+
+### Via REST API
+
+See **[AS3935_REGISTER_API.md](AS3935_REGISTER_API.md)** for complete API documentation.
+
+```bash
+# Read all registers
+curl http://192.168.x.x/api/as3935/registers/all
+
+# Write a register (e.g., increase sensitivity)
+curl -X POST http://192.168.x.x/api/as3935/register/write \
+  -H "Content-Type: application/json" \
+  -d '{"reg":"0x00","value":"0x40"}'
+```
+
+## AS3935 Register Configuration
+
+The sensor's behavior is controlled via 9 registers. You can adjust:
+
+- **Register 0x00** - AFE Gain (sensitivity)
+- **Register 0x01** - Threshold (detection level)
+- **Register 0x02** - Configuration
+- **Register 0x07** - Calibration
+
+See **[AS3935_ADVANCED_SETTINGS_QUICK.md](AS3935_ADVANCED_SETTINGS_QUICK.md)** for quick tuning tips or **[AS3935_REGISTER_CONFIGURATION.md](AS3935_REGISTER_CONFIGURATION.md)** for the complete guide.
+
+## Time Synchronization
+
+The firmware synchronizes its system clock using SNTP once it connects to Wi-Fi. 
+
+- After the device obtains an IP address (`IP_EVENT_STA_GOT_IP`), the SNTP client initializes and fetches wall-clock time from `pool.ntp.org` by default
+- A background task restarts SNTP every 12 hours to reduce clock drift. For tighter accuracy, configure a local NTP server on your LAN
+- Events include both monotonic `uptime_ms` (milliseconds since boot) and an optional wall-clock `ts_ms` with a `time_ok` flag
+
+## MQTT Payload Format
+
+When lightning is detected, the device publishes a compact JSON event to the broker (default topic: `as3935/lightning`).
+
+**Example with synchronized time:**
+
+```json
 {
 	"e": "lightning",
 	"distance_km": 12.3,
@@ -68,9 +128,9 @@ Example payload (when time is synced):
 }
 ```
 
-Example payload (offline / no SNTP sync yet):
+**Example without synchronized time:**
 
-```
+```json
 {
 	"e": "lightning",
 	"distance_km": 12.3,
@@ -81,209 +141,93 @@ Example payload (offline / no SNTP sync yet):
 }
 ```
 
-Notes on accuracy
-- `uptime_ms`: obtained from the ESP-IDF high-resolution monotonic timer (`esp_timer_get_time()`), reliable for ordering and relative timings (microsecond resolution; typically reported in ms).
-- `ts_ms`: obtained from system time after SNTP sync (`gettimeofday()`); typical achievable accuracy vs a public NTP pool is tens of milliseconds, depending on network latency.
-- `err_ms`: optional; you can approximate it as half the SNTP round-trip time or use SNTP offset information if your SNTP client provides it.
+**Field Notes:**
 
-Examples & helper scripts
-- Install Python helpers:
+- `uptime_ms`: Monotonic milliseconds since boot (always present, microsecond resolution)
+- `ts_ms`: Wall-clock epoch milliseconds (UTC, present only if `time_ok == true`)
+- `err_ms`: Estimated time uncertainty (optional, approximately half the SNTP round-trip time)
+
+## Examples & Helper Scripts
+
 ```bash
+# Install Python dependencies
 pip install -r requirements.txt
-```
-- Listen with mosquitto_sub:
-```bash
+
+# Listen with mosquitto_sub
 mosquitto_sub -h <broker_ip> -t 'as3935/lightning' -v
-```
-- Python MQTT subscriber:
-```bash
+
+# Python MQTT subscriber
 python scripts/mqtt_sub_example.py --broker 192.168.1.10 --port 1883 --topic as3935/lightning
-```
-- SSE subscriber (connect to the device's event stream):
-```bash
+
+# SSE subscriber (real-time events from device)
 python scripts/sse_sub_example.py --url http://192.168.4.1/api/events/stream
 ```
 
-Security
-- Credentials are stored in NVS in plain text. For production use, consider stronger key management or encrypting secrets at rest.
+## Web UI Development
 
-Release notes / first-deploy checklist
-- Build and flash the firmware to a test device.
-- Connect a mobile device to the provisioning AP and confirm the captive-portal SPA appears.
-- Provision Wi‑Fi and MQTT settings via the SPA.
-- Confirm the device connects to Wi‑Fi and performs an SNTP sync (check serial logs for "Initializing SNTP").
-- Verify MQTT events arrive at your broker with `time_ok` true when SNTP is successful, and `uptime_ms` always present.
-
-Contributing
-- Please open an issue for bugs or feature requests. For code changes, send a pull request with a clear description and a small focused diff.
-
-- POST /api/as3935/save
-- GET  /api/as3935/status
-- GET  /api/events/stream (SSE)
-
-MQTT payload
-- Published JSON looks like: `{ "distance_km": <number>, "energy": <number>, "ts": <unix_ms_optional> }`.
-
-Time synchronization (SNTP / NTP)
-- The firmware can synchronize its system clock using SNTP once it obtains a Wi‑Fi connection and an IP address. This is enabled by the firmware: after the device gets an IP (`IP_EVENT_STA_GOT_IP`) the SNTP client is initialized and will obtain wall-clock time from `pool.ntp.org` by default.
-- The device also runs a small background resync task that restarts SNTP every 12 hours to reduce clock drift. If your deployment requires tighter accuracy, point SNTP to a local NTP server on the same LAN.
-- While the device may send events before time is synced, event payloads always include a monotonic `uptime_ms` (milliseconds since boot) and a `time_ok` flag indicating whether wall-clock timestamps are valid.
-
-MQTT payload (recommended schema)
-- Use compact JSON to keep payloads small. Send both a monotonic uptime and an optional wall-clock timestamp when available. Include a sequence number for ordering and a small error estimate when applicable.
-
-Example payload (when time is synced):
+The embedded single-page app (SPA) is located at:
 
 ```
-{
-	"e": "lightning",
-	"distance_km": 12.3,
-	"energy": 5,
-	"ts_ms": 1700000000123,    // wall-clock epoch ms (UTC), present only if time_ok==true
-	"uptime_ms": 1234567,      // monotonic ms since boot (always present)
-	"seq": 42,
-	"time_ok": true,
-	"err_ms": 35               // optional estimate of time uncertainty
-}
+components/main/web/index.html
 ```
 
-Example payload (offline / no SNTP sync yet):
-
-```
-{
-	"e": "lightning",
-	"distance_km": 12.3,
-	"energy": 5,
-	"uptime_ms": 23456,
-	"seq": 7,
-	"time_ok": false
-}
-```
-
-Notes on accuracy
-- `uptime_ms`: obtained from the ESP-IDF high-resolution monotonic timer (`esp_timer_get_time()`), reliable for ordering and relative timings (microsecond resolution; typically reported in ms).
-- `ts_ms`: obtained from system time after SNTP sync (`gettimeofday()`); typical achievable accuracy vs a public NTP pool is tens of milliseconds, depending on network latency. For best results use a local LAN NTP server.
-- `err_ms`: optional; you can approximate it as half the SNTP round-trip time or use SNTP offset information if your SNTP client provides it.
-
-Examples & helper scripts
-- Install Python helpers:
-	```bash
-	pip install -r requirements.txt
-	```
-- Listen with mosquitto_sub:
-	```bash
-	mosquitto_sub -h <broker_ip> -t 'as3935/lightning' -v
-	```
-- Python MQTT subscriber:
-	```bash
-	python scripts/mqtt_sub_example.py --broker 192.168.1.10 --port 1883 --topic as3935/lightning
-	```
-- SSE subscriber (connect to the device's event stream):
-	```bash
-	python scripts/sse_sub_example.py --url http://192.168.4.1/api/events/stream
-	```
-
-Tidying notes
-- Removed old/duplicate tasks from README. The repo TODOs are tracked in the project issue list.
-
-Security
-- Credentials are stored in NVS in plain text. For production use, consider stronger key management.
-
-# AS3935 Lightning Monitor for ESP32
-
-This project provides firmware for the ESP32 to interface with the AS3935 lightning detector, host a web UI for configuration, and publish lightning events over MQTT.
-
-Current status
-- Project scaffold with basic HTTP server and AS3935 driver stub.
-
-Provisioning and configuration
-- Web provisioning portal available on the device (AP mode on first boot).
-- Use the web UI to configure Wi‑Fi, MQTT broker (URI + TLS flag), and AS3935 register map (JSON).
-
-AS3935 configuration via UI
-- Sensor ID dropdown: the UI now provides a simple Sensor ID dropdown (Sensor 1/2/3) instead of requiring a JSON upload for the common case. Choosing a sensor and clicking Save will POST {"sensor_id": <1|2|3>} to `/api/as3935/save` and the value is persisted to NVS under the key `sensor_id`.
-
-- Advanced: Register JSON (unchanged): the UI still supports uploading a register map JSON for advanced configuration. That format is a JSON object where keys are register addresses (hex like `"0x03"` or decimal like `"3"`) and values are integers 0–255. Example:
-	```json
-	{"0x00":36, "0x01":34, "0x02":2}
-	```
-	When saved the firmware will write the provided values to the sensor and persist the JSON in NVS so it is re-applied on reboot.
-
-Suggested wiring (ESP32-C3)
-- AS3935 <---> ESP32-C3 (I2C)
-	- SDA -> GPIO (example) 8
-	- SCL -> GPIO (example) 9
-	- IRQ -> GPIO (example) 10 (configure in the UI)
-	- VCC -> 3.3V
-	- GND -> GND
-
-Notes
-- The AS3935 module variants may use different register maps or an I2C bridge address; use the UI to load and test register writes before relying on them.
-- After configuring MQTT in the UI, the device will attempt to connect and publish lightning events to topic `as3935/lightning` with JSON payload {"distance_km":...,"energy":...}.
-
-Build & Flash (ESP-IDF required)
-
-1. Install ESP-IDF (see Espressif docs).
-2. Set up environment variables per ESP-IDF.
-3. From project root:
-
-```bash
-idf.py set-target esp32
-idf.py build
-idf.py -p /dev/ttyUSB0 flash monitor
-```
-
-## Editing the embedded web UI (SPA)
-
-The single-page app that the firmware serves lives in plain HTML at:
-
-- `components/main/web/index.html`
-
-During CMake configure the project automatically converts this HTML into a C
-header (so the firmware can serve it from flash). The converter is
-`tools/embed_web.py` and the generated header is written into the build tree
-under the component's generated directory, for example:
+During the CMake configure phase, the HTML is automatically converted into a C header so the firmware can serve it from flash storage. The converter is `tools/embed_web.py`, and the generated header is written to:
 
 ```
 build/esp-idf/main/generated/web_index.h
 ```
 
-Quick workflow
+### Development Workflow
 
-- Edit the SPA in `components/main/web/index.html`.
-- Re-generate the header and build the firmware (the build runs the generator
-	automatically):
+Edit the SPA in `components/main/web/index.html`, then rebuild:
 
 ```bash
 idf.py build
 ```
 
-- Run the tests (unit tests use the generated header too):
+### Run Tests
 
 ```bash
 idf.py -DTEST=true build
 ```
 
-- Flash + monitor (device required):
+### Flash and Monitor
 
 ```bash
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-Manual regeneration
+## Manual Header Regeneration
 
-If you prefer to regenerate the header manually (without a full CMake run),
-you can run the converter script directly:
+To regenerate the web header without a full CMake rebuild:
 
 ```bash
 python3 tools/embed_web.py components/main/web/index.html build/esp-idf/main/generated/web_index.h
 ```
 
-Notes
+**Important Notes:**
 
-- Do not commit generated header files into the repository. The project
-	intentionally keeps the editable `index.html` under `components/main/web/`
-	and generates the C header into the build tree during configure/build.
-- If you want CI to validate changes to the SPA, have your CI run:
-	`idf.py -DTEST=true build` so the generated header is created and unit tests run.
+- Do not commit generated header files to the repository
+- The build tree automatically generates the C header during configure/build
+- For CI validation, run: `idf.py -DTEST=true build` to generate the header and run tests
+
+## Security Notes
+
+- Credentials are stored in NVS in plain text
+- For production use, consider stronger key management or encryption at rest
+
+## Contributing
+
+- Open an issue for bugs or feature requests
+- Send pull requests with clear descriptions and focused diffs
+
+## Quick Links
+
+- [I2C Address Configuration](I2C_ADDRESS_CONFIGURATION.md)
+- [I2C Pinout Guide](I2C_PINOUT_GUIDE.md)
+- [AS3935 Register Configuration](AS3935_REGISTER_CONFIGURATION.md)
+- [Advanced Settings](AS3935_ADVANCED_SETTINGS_QUICK.md)
+- [Register API Documentation](AS3935_REGISTER_API.md)
+- [Live Status Display](LIVE_STATUS_DISPLAY.md)
+- [Complete Documentation Index](DOCUMENTATION_INDEX.md)
 

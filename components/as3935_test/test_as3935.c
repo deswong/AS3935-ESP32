@@ -46,11 +46,11 @@ void test_nvs_save_and_load_config(void)
     TEST_ASSERT_EQUAL_STRING(cfg, buf);
 }
 
-int app_main(void)
+// Move app_main() logic into a separate test function
+void as3935_run_tests(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_apply_config_json_writes_registers);
     RUN_TEST(test_nvs_save_and_load_config);
     UNITY_END();
-    return 0;
 }

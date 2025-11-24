@@ -5,114 +5,1270 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>AS3935 Config</title>
   <style>
-    :root{--primary:#0d47a1;--muted:#6b7280;--bg:#f6f8fb;--card:#fff}
+    :root{--primary:#0d47a1;--muted:#6b7280;--bg:#f6f8fb;--card:#fff;--success:#388e3c;--warning:#f57c00;--error:#d32f2f}
+    *{box-sizing:border-box}
     body{font-family:Inter,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:#111}
-    header{background:linear-gradient(90deg,var(--primary),#1565c0);color:#fff;padding:12px 16px}
-    main{max-width:980px;margin:16px auto;padding:12px}
-    section.card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:14px}
-    .label{font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef9}
-    button{background:var(--primary);color:#fff;border:none;padding:8px 12px;border-radius:8px}
-    button.ghost{background:transparent;color:var(--primary);border:1px solid rgba(13,71,161,0.12)}
+    header{background:linear-gradient(90deg,var(--primary),#1565c0);color:#fff;padding:16px;margin-bottom:16px}
+    header h1{font-size:22px;margin:0;display:flex;align-items:center;gap:8px}
+    main{max-width:1200px;margin:0 auto;padding:0 12px 24px}
+    section.card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+    section.card h3{margin:0 0 16px 0;padding-bottom:8px;border-bottom:2px solid #f0f0f0}
+    .label{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef9;font-family:inherit;font-size:14px}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,71,161,0.1)}
+    button{background:var(--primary);color:#fff;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:500;font-size:14px}
+    button:hover{background:#0a3a8a}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    button.ghost{background:transparent;color:var(--primary);border:1px solid rgba(13,71,161,0.2)}
+    button.ghost:hover{background:rgba(13,71,161,0.05)}
+    button.btn-active{background:var(--primary);color:#fff;border:1px solid var(--primary)}
+    button.btn-active:hover{background:#0a3a8a}
+    button.btn-secondary{background:transparent;color:#999;border:1px solid #ddd}
+    button.btn-secondary:hover{background:#f5f5f5}
+    button.success{background:var(--success)}button.success:hover{background:#2e7d32}
+    button.danger{background:var(--error)}button.danger:hover{background:#b71c1c}
+    .grid{display:grid;gap:12px}
+    @media(min-width:768px){.grid{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(3,1fr)}.grid.full{grid-template-columns:1fr}}
+    @media(max-width:767px){.grid,.grid-3,.grid.full{grid-template-columns:1fr!important}}
+    .field-row{display:flex;gap:8px;align-items:flex-end}
+    .field-row>*{flex:1;display:flex;flex-direction:column}
+    .toggle-btn{background:transparent;color:var(--primary);border:1px solid rgba(13,71,161,0.2);padding:8px;width:44px;flex:0 0 44px!important}
+    .status-box{padding:12px;border-radius:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+    .status-box.connected{background:#e8f5e9;border-left:4px solid var(--success)}
+    .status-box.connecting{background:#fff3e0;border-left:4px solid var(--warning)}
+    .status-box.disconnected{background:#ffebee;border-left:4px solid var(--error)}
+    .status-text{font-weight:bold}
+    .status-text.connected{color:var(--success)}
+    .status-text.connecting{color:var(--warning)}
+    .status-text.disconnected{color:var(--error)}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(0,0,0,0.1);border-top:2px solid var(--primary);border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .button-group{display:flex;gap:8px;flex-wrap:wrap}
+    .info{background:#e3f2fd;border-left:4px solid var(--primary);padding:12px;border-radius:6px;font-size:13px;color:#0d47a1;margin-bottom:12px}
   </style>
 </head>
 <body>
 <header>
-  <h1 style="font-size:18px;margin:0">AS3935 Config</h1>
+  <h1>⚡ AS3935 Lightning Monitor</h1>
 </header>
 <main>
   <section class="card">
-    <h3 style="margin:0 0 8px 0">Wi-Fi</h3>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1">
-        <div class="label">SSID</div>
-        <input id="wifi_ssid" type="text" placeholder="SSID">
+    <h3>📡 Wi-Fi Configuration</h3>
+    <div class="info">Select from available networks or enter a hidden SSID manually. Settings are saved automatically when you click "Connect Now".</div>
+    <div class="grid grid-3">
+      <div>
+        <div class="label">Network (SSID)</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="wifi_ssid_select" style="flex:1">
+            <option value="">Loading networks...</option>
+          </select>
+          <button id="wifi_scan" class="ghost" style="flex:0;padding:10px;width:44px" title="Refresh networks">🔄</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">or enter manually:</div>
+        <input id="wifi_ssid_manual" type="text" placeholder="Hidden SSID (optional)" style="margin-top:4px">
       </div>
-      <div style="flex:1">
+      <div>
         <div class="label">Password</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="wifi_password" type="password" placeholder="Password" style="flex:1">
-          <button id="wifi_pwd_toggle" class="ghost" title="Show/Hide password">👁</button>
-          <span id="wifi_pwd_badge" style="font-size:12px;color:var(--muted)"></span>
+        <form style="display:contents">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="wifi_password" type="password" placeholder="Password" style="flex:1" autocomplete="off">
+            <button id="wifi_pwd_toggle" type="button" class="toggle-btn" title="Show/Hide">👁</button>
+            <span id="wifi_pwd_badge" style="font-size:12px;color:var(--muted);min-width:40px;text-align:right"></span>
+          </div>
+        </form>
+      </div>
+      <div>
+        <div class="label">Current SSID</div>
+        <div style="padding:10px;background:#f5f5f5;border-radius:8px;font-size:14px;display:flex;align-items:center;gap:8px">
+          <span id="wifi_current_ssid">Not connected</span>
+          <span id="wifi_signal" style="min-width:30px;text-align:right;color:var(--muted)"></span>
         </div>
       </div>
-      <div style="width:160px;display:flex;flex-direction:column;gap:6px">
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button id="wifi_save" class="ghost">Save Wi-Fi</button>
-          <button id="wifi_connect" class="ghost">Connect Now</button>
-        </div>
+    </div>
+    <div class="button-group" style="margin-top:16px">
+      <button id="wifi_save" class="ghost">Save Settings</button>
+      <button id="wifi_connect" class="success" style="flex:1">↗ Connect Now</button>
+    </div>
+    <div id="wifi_status" style="margin-top:12px;padding:8px;font-size:13px;color:var(--muted)"></div>
+  </section>
+
+  <section class="card">
+    <h3>🔌 MQTT Broker Configuration</h3>
+    <div id="mqtt_status_box" class="status-box disconnected">
+      <div>
+        <div style="font-size:12px;color:#666;margin-bottom:4px">Connection Status</div>
+        <div class="status-text disconnected" id="mqtt_status_display">Disconnected</div>
       </div>
+      <button id="mqtt_refresh" class="ghost" style="width:auto">Refresh</button>
+    </div>
+    <div class="grid grid-3">
+      <div>
+        <div class="label">Protocol</div>
+        <select id="mqtt_protocol">
+          <option value="mqtt">mqtt://</option>
+          <option value="mqtts">mqtts:// (TLS)</option>
+        </select>
+      </div>
+      <div>
+        <div class="label">Hostname or IP</div>
+        <input id="mqtt_host" type="text" placeholder="192.168.1.97 or broker.example.com">
+      </div>
+      <div>
+        <div class="label">Port</div>
+        <input id="mqtt_port" type="number" placeholder="1883" min="1" max="65535" value="1883">
+      </div>
+      <div>
+        <div class="label">Lightning Topic</div>
+        <input id="mqtt_topic" type="text" placeholder="as3935/lightning" value="as3935/lightning">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Topic for lightning strike events</div>
+      </div>
+      <div>
+        <div class="label">Availability Topic</div>
+        <input id="mqtt_availability_topic" type="text" placeholder="as3935/availability" value="as3935/availability">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Topic for online/offline status</div>
+      </div>
+      <div>
+        <div class="label">Username</div>
+        <input id="mqtt_username" type="text" placeholder="(optional)">
+      </div>
+      <div>
+        <div class="label">Password</div>
+        <form style="display:contents">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="mqtt_password" type="password" placeholder="(optional)" style="flex:1" autocomplete="off">
+            <button id="mqtt_pwd_toggle" type="button" class="toggle-btn" title="Show/Hide">👁</button>
+            <span id="mqtt_pwd_badge" style="font-size:12px;color:var(--muted);min-width:40px;text-align:right"></span>
+          </div>
+        </form>
+      </div>
+      <div>
+        <div class="label">CA Certificate (TLS)</div>
+        <textarea id="mqtt_ca_cert" placeholder="PEM format (optional)" style="min-height:60px;font-family:monospace;font-size:11px"></textarea>
+      </div>
+    </div>
+    <div class="button-group" style="margin-top:16px">
+      <button id="mqtt_save" class="success">Save & Connect</button>
+      <button id="mqtt_test" class="ghost">Test Publish</button>
+      <button id="mqtt_clear" class="danger">Clear All</button>
     </div>
   </section>
 
   <section class="card">
-    <h3 style="margin:0 0 8px 0">MQTT</h3>
-    <div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-      <div class="col">
-        <div class="label">Broker URI</div>
-        <input id="mqtt_uri" type="text" placeholder="mqtt://broker:1883 or mqtts://...">
+    <h3>📍 AS3935 Sensor - I2C Configuration</h3>
+    <div class="info">⚠️ <strong>GPIO 11-21 are reserved</strong> (flash/UART) - use GPIO 0-10 or 22-27 only. Default pins are safe (SDA=21, SCL=22, IRQ=0). The fields below show your current saved configuration. Changing pins will reset the I2C bus.</div>
+    <div id="as3935_status_box" class="status-box disconnected" style="display:none;margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-size:12px;color:#666;margin-bottom:4px">Sensor Status</div>
+        <div class="status-text" id="as3935_status_text">Initializing...</div>
+        <div id="as3935_status_details" style="font-size:11px;color:#666;margin-top:6px"></div>
       </div>
-      <div class="col">
-        <div class="label">Topic</div>
-        <input id="mqtt_topic" type="text" placeholder="as3935/lightning">
+      <button id="as3935_refresh" class="ghost" style="width:auto;align-self:flex-start">🔄 Refresh</button>
+    </div>
+    <div class="grid grid-3">
+      <div>
+        <div class="label">I2C Port</div>
+        <input id="as3935_i2c_port" type="number" placeholder="0" min="0" max="1" value="0">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">0 or 1</div>
       </div>
-      <div class="col">
-        <div class="label">Username</div>
-        <input id="mqtt_username" type="text">
+      <div>
+        <div class="label">SDA Pin (Data)</div>
+        <input id="as3935_sda" type="number" placeholder="21" min="0" max="47" value="21">
       </div>
-      <div class="col">
-        <div class="label">Password</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="mqtt_password" type="password" placeholder="Password" style="flex:1">
-          <button id="mqtt_pwd_toggle" class="ghost" title="Show/Hide password">👁</button>
-          <span id="mqtt_pwd_badge" style="font-size:12px;color:var(--muted)"></span>
+      <div>
+        <div class="label">SCL Pin (Clock)</div>
+        <input id="as3935_scl" type="number" placeholder="22" min="0" max="47" value="22">
+      </div>
+      <div>
+        <div class="label">IRQ Pin</div>
+        <input id="as3935_irq" type="number" placeholder="0" min="-1" max="47" value="0">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Use -1 to disable IRQ</div>
+      </div>
+      <div>
+        <div class="label">I2C Address (Hex)</div>
+        <input id="as3935_addr" type="text" placeholder="0x03" value="0x03">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">E.g., 0x03, 0x02 (must be 0x00-0xFF)</div>
+      </div>
+    </div>
+    <div class="button-group" style="margin-top:16px">
+      <button id="as3935_save" class="success">Save Pins</button>
+      <button id="as3935_save_addr" class="success">Save Address</button>
+      <button id="as3935_status" class="ghost">View Details</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>⚙️ AS3935 Sensor - Advanced Settings <span id="settings_loading_indicator" style="display:none;font-size:14px;color:var(--muted)">⏳ Loading...</span></h3>
+    <div class="info">Fine-tune lightning detection sensitivity and behavior. Click the <strong>ℹ️ Info</strong> button next to each setting to learn more.</div>
+    
+    <div class="grid grid-3" style="margin-bottom:16px">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Environment Mode</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('afe')">ℹ️ Info</button>
+        </div>
+        <select id="as3935_afe">
+          <option value="0">Select...</option>
+          <option value="18">🏠 Indoor (more sensitive)</option>
+          <option value="14">🏞️ Outdoor (less sensitive)</option>
+        </select>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Noise Level Threshold</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('noise')">ℹ️ Info</button>
+        </div>
+        <select id="as3935_noise_level">
+          <option value="">Select...</option>
+          <option value="0">Level 0: 390µV (least noise rejection)</option>
+          <option value="1">Level 1: 630µV</option>
+          <option value="2">Level 2: 860µV (default)</option>
+          <option value="3">Level 3: 1100µV</option>
+          <option value="4">Level 4: 1140µV</option>
+          <option value="5">Level 5: 1570µV</option>
+          <option value="6">Level 6: 1800µV</option>
+          <option value="7">Level 7: 2000µV (most noise rejection)</option>
+        </select>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Spike Rejection (0-15)</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('spike')">ℹ️ Info</button>
+        </div>
+        <input id="as3935_spike_rejection" type="number" min="0" max="15" placeholder="0-15">
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Min Lightning Strikes</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('strikes')">ℹ️ Info</button>
+        </div>
+        <select id="as3935_min_strikes">
+          <option value="">Select...</option>
+          <option value="0">1 Strike (most sensitive)</option>
+          <option value="1">5 Strikes</option>
+          <option value="2">9 Strikes</option>
+          <option value="3">16 Strikes (least sensitive)</option>
+        </select>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Watchdog Threshold (0-10)</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('watchdog')">ℹ️ Info</button>
+        </div>
+        <input id="as3935_watchdog" type="number" min="0" max="10" placeholder="0-10">
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="label">Disturber Detection</div>
+          <button class="ghost" style="padding:4px 8px;font-size:12px;width:auto" onclick="showSettingInfo('disturber')">ℹ️ Info</button>
+        </div>
+        <div style="display:flex;gap:8px;height:40px">
+          <button id="as3935_disturber_on" class="ghost" style="flex:1">✓ Enabled</button>
+          <button id="as3935_disturber_off" class="ghost" style="flex:1">✗ Disabled</button>
         </div>
       </div>
     </div>
-    <div style="margin-top:12px;display:flex;gap:8px">
-      <button id="mqtt_save" class="ghost">Save MQTT</button>
-      <button id="mqtt_test" class="ghost">Test Publish</button>
+
+    <div class="button-group" style="margin-bottom:16px">
+      <button id="as3935_apply_settings" class="success" style="flex:1">💾 Apply Settings</button>
+    </div>
+
+    <div class="grid">
+      <div>
+        <button id="system_reboot" class="danger" style="width:100%">🔄 Reboot Device</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Restarting will reconnect to WiFi and MQTT</div>
+      </div>
     </div>
   </section>
+
+  <!-- Settings Info Modal -->
+  <div id="settings_info_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1001;overflow:auto">
+    <div style="background:white;margin:20px auto;padding:20px;border-radius:12px;max-width:600px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0">Setting Information</h2>
+        <button class="ghost" style="padding:4px 8px" onclick="document.getElementById('settings_info_modal').style.display='none'">✕ Close</button>
+      </div>
+      <p id="settings_info_content" style="font-size:14px;white-space:pre-wrap;line-height:1.6;max-height:400px;overflow-y:auto;margin:0">
+        <!-- Content will be populated by JavaScript -->
+      </p>
+    </div>
+  </div>
+
+  <!-- Register Guide Modal (kept for backward compatibility) -->
+  <div id="register_guide_modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;overflow:auto">
+    <div style="background:white;margin:20px auto;padding:20px;border-radius:12px;max-width:600px">
+      <h2 style="margin-top:0">AS3935 Register Guide</h2>
+      <div style="max-height:400px;overflow-y:auto;font-size:13px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr style="background:#f0f0f0">
+            <th style="padding:8px;text-align:left;border-bottom:1px solid #ccc">Register</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid #ccc">Name</th>
+            <th style="padding:8px;text-align:left;border-bottom:1px solid #ccc">Description</th>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x00</strong></td>
+            <td style="padding:8px">AFE Gain</td>
+            <td style="padding:8px">Controls receiver gain (0x00-0xFF, typical: 0x24)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x01</strong></td>
+            <td style="padding:8px">Threshold</td>
+            <td style="padding:8px">Lightning detection threshold (0x00-0xFF, typical: 0x22)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x02</strong></td>
+            <td style="padding:8px">Config</td>
+            <td style="padding:8px">General configuration (0x00-0xFF)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x03</strong></td>
+            <td style="padding:8px">Status</td>
+            <td style="padding:8px">Lightning event status (read-only)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x04</strong></td>
+            <td style="padding:8px">L.Energy MSB</td>
+            <td style="padding:8px">Lightning energy MSB (read-only)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x05</strong></td>
+            <td style="padding:8px">L.Energy MID</td>
+            <td style="padding:8px">Lightning energy middle byte (read-only)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x06</strong></td>
+            <td style="padding:8px">L.Energy LSB</td>
+            <td style="padding:8px">Lightning energy LSB (read-only)</td>
+          </tr>
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px"><strong>0x07</strong></td>
+            <td style="padding:8px">Calibration</td>
+            <td style="padding:8px">RLC calibration (tuning, typical: 0x00-0x0F)</td>
+          </tr>
+          <tr>
+            <td style="padding:8px"><strong>0x08</strong></td>
+            <td style="padding:8px">Distance</td>
+            <td style="padding:8px">Lightning distance estimate in km (read-only)</td>
+          </tr>
+        </table>
+      </div>
+      <button onclick="document.getElementById('register_guide_modal').style.display='none'" style="margin-top:12px;width:100%">Close</button>
+    </div>
+  </div>
 
 </main>
 <script>
 (function(){
+  let mqtt_check_interval = null;
+  
   async function jsonReq(u,o){ try{ const r = await fetch(u,o); if(!r.ok) return null; return await r.json(); }catch(e){return null;} }
   function setBadge(id,text){ const el = document.getElementById(id); if(el) el.innerText = text || ''; }
   function toggle(id){ const el=document.getElementById(id); if(!el) return; el.type = el.type==='password' ? 'text' : 'password'; }
 
-  async function load(){
-    const w = await jsonReq('/api/wifi/status');
-    if(w){ document.getElementById('wifi_ssid').value = w.ssid||''; if(w.password_set){ document.getElementById('wifi_password').placeholder='saved (leave empty)'; setBadge('wifi_pwd_badge','saved'); }}
-    const m = await jsonReq('/api/mqtt/status');
-    if(m){ document.getElementById('mqtt_uri').value = m.uri||''; document.getElementById('mqtt_topic').value = m.topic||''; document.getElementById('mqtt_username').value = m.username||''; if(m.password_set){ document.getElementById('mqtt_password').placeholder='saved (leave empty)'; setBadge('mqtt_pwd_badge','saved'); }}
+  function showRegisterGuide(e){
+    if(e) e.preventDefault();
+    document.getElementById('register_guide_modal').style.display = 'block';
+  }
+  window.showRegisterGuide = showRegisterGuide;
+
+  async function scanWiFiNetworks(){
+    try {
+      const select = document.getElementById('wifi_ssid_select');
+      select.innerHTML = '<option value="">Scanning...</option>';
+      const networks = await jsonReq('/api/wifi/scan');
+      if(!networks || networks.length === 0){
+        select.innerHTML = '<option value="">No networks found</option>';
+        return;
+      }
+      select.innerHTML = '<option value="">-- Select Network --</option>';
+      networks.forEach(net => {
+        const opt = document.createElement('option');
+        opt.value = net.ssid;
+        opt.textContent = net.ssid + (net.rssi ? ` (${net.rssi}dBm)` : '');
+        select.appendChild(opt);
+      });
+    } catch(e){
+      console.error('Scan error:', e);
+    }
   }
 
+  async function updateWiFiStatus(){
+    const w = await jsonReq('/api/wifi/status');
+    if(w){
+      document.getElementById('wifi_current_ssid').innerText = w.ssid || 'Not connected';
+      document.getElementById('wifi_signal').innerText = w.signal ? w.signal + '%' : '';
+      document.getElementById('wifi_status').innerText = w.ip ? `IP: ${w.ip}` : 'Connecting...';
+      if(w.password_set){ 
+        document.getElementById('wifi_password').placeholder='saved (leave empty)'; 
+        setBadge('wifi_pwd_badge','saved'); 
+      }
+    }
+  }
+
+  async function updateMqttStatus(auto_refresh=false){
+    const m = await jsonReq('/api/mqtt/status');
+    if(!m) return;
+    
+    // Only update configuration fields on initial load, not on auto-refresh
+    // This prevents overwriting user input while they're editing
+    if(!auto_refresh) {
+      // Parse URI into components (mqtt://host:port or mqtts://host:port)
+      if(m.uri) {
+        try {
+          const url = new URL(m.uri);
+          document.getElementById('mqtt_protocol').value = url.protocol === 'mqtts:' ? 'mqtts' : 'mqtt';
+          document.getElementById('mqtt_host').value = url.hostname || '';
+          document.getElementById('mqtt_port').value = url.port || (url.protocol === 'mqtts:' ? '8883' : '1883');
+        } catch(e) {
+          // If parsing fails, try manual extraction
+          const match = m.uri.match(/^(mqtts?):\/\/([^:]+):?(\d+)?$/);
+          if(match) {
+            document.getElementById('mqtt_protocol').value = match[1];
+            document.getElementById('mqtt_host').value = match[2];
+            document.getElementById('mqtt_port').value = match[3] || (match[1] === 'mqtts' ? '8883' : '1883');
+          }
+        }
+      }
+      
+      document.getElementById('mqtt_topic').value = m.topic || 'as3935/lightning';
+      document.getElementById('mqtt_availability_topic').value = m.availability_topic || 'as3935/availability';
+      document.getElementById('mqtt_username').value = m.username||'';
+      if(m.ca_cert) document.getElementById('mqtt_ca_cert').value = m.ca_cert;
+    }
+    
+    // Always update password badge (since we don't show the actual password)
+    if(m.password_set){ 
+      document.getElementById('mqtt_password').placeholder='saved (leave empty)'; 
+      setBadge('mqtt_pwd_badge','saved'); 
+    } else {
+      document.getElementById('mqtt_password').placeholder='(optional)';
+      setBadge('mqtt_pwd_badge','');
+    }
+    
+    const statusEl = document.getElementById('mqtt_status_display');
+    const statusBox = document.getElementById('mqtt_status_box');
+    if(!statusEl || !statusBox) return;
+    
+    statusBox.className = 'status-box';
+    if(m.connected){
+      statusEl.innerText = '✓ Connected';
+      statusEl.className = 'status-text connected';
+      statusBox.classList.add('connected');
+    } else if(m.configured){
+      statusEl.innerHTML = '<span class="spinner"></span> Connecting...';
+      statusEl.className = 'status-text connecting';
+      statusBox.classList.add('connecting');
+    } else {
+      statusEl.innerText = '✗ Not Configured';
+      statusEl.className = 'status-text disconnected';
+      statusBox.classList.add('disconnected');
+    }
+  }
+
+  async function updateAs3935Status(){
+    const status = await jsonReq('/api/as3935/status');
+    const statusBox = document.getElementById('as3935_status_box');
+    const statusText = document.getElementById('as3935_status_text');
+    const statusDetails = document.getElementById('as3935_status_details');
+    
+    if(!statusBox || !statusText || !statusDetails) return;
+    
+    if(status) {
+      statusBox.style.display = 'flex';
+      
+      // Check if sensor is initialized (i2c_dev is not NULL)
+      if(status.initialized === true || status.initialized === 'true') {
+        // Sensor is initialized and responding
+        statusBox.className = 'status-box connected';
+        statusText.className = 'status-text connected';
+        statusText.innerHTML = `✓ <strong>Sensor Active & Responding</strong>`;
+        statusDetails.innerHTML = `
+          <strong>Register Status:</strong><br/>
+          R0 (System): ${status.r0}<br/>
+          R1 (Config): ${status.r1}<br/>
+          R3 (Lightning): ${status.r3}<br/>
+          R8 (Distance): ${status.r8}
+        `;
+      } else {
+        // Sensor not responding
+        statusBox.className = 'status-box disconnected';
+        statusText.className = 'status-text disconnected';
+        statusText.innerHTML = '✗ <strong>Sensor Not Responding</strong>';
+        statusDetails.innerHTML = `
+          <strong>Troubleshooting:</strong><br/>
+          • Check I2C address (try 0x01, 0x02, 0x03)<br/>
+          • Verify GPIO 7 (SDA) and GPIO 4 (SCL) wiring<br/>
+          • Confirm 3.3V power and GND connection<br/>
+          • See URGENT_I2C_NACK_ERROR.md for help
+        `;
+      }
+    } else {
+      statusBox.style.display = 'none';
+    }
+  }
+
+  // Setting descriptions for info modal (global scope for onclick handlers)
+  const settingDescriptions = {
+    afe: "🌍 ENVIRONMENT MODE\n\nDetermines the sensitivity of the AS3935 sensor for different environments.\n\n📊 INDOOR (Value: 18)\n• More sensitive to weak lightning signals\n• Better for detecting distant lightning indoors\n• Increases sensitivity by ~20-30%\n• Recommended when you want maximum detection range\n\n🏞️ OUTDOOR (Value: 14)\n• Less sensitive, more selective\n• Better at filtering out man-made electrical noise\n• Recommended for locations with high electrical activity\n• Reduces false positives from nearby power lines and machinery\n\n💡 TIPS:\n• Start with INDOOR in quiet areas, switch to OUTDOOR if you get too many false alarms\n• INDOOR is better for open fields away from electrical noise\n• OUTDOOR is better for urban/industrial areas",
+    
+    noise: "🔊 NOISE LEVEL THRESHOLD\n\nControls the sensor's immunity to electrical noise.\n\n📈 SENSITIVITY SCALE (0-7):\n• Level 0 (390µV): Lowest immunity - detects very weak signals but prone to false positives\n• Level 1 (630µV): Low immunity\n• Level 2 (860µV): DEFAULT - good balance for most applications\n• Level 3 (1100µV): Moderate immunity\n• Level 4 (1140µV): Moderate-high immunity\n• Level 5 (1570µV): High immunity\n• Level 6 (1800µV): Very high immunity\n• Level 7 (2000µV): Maximum immunity - ignores weak signals\n\n⚙️ WHAT IT DOES:\n• Higher values = more noise rejection but misses weaker lightning\n• Lower values = better detection but more false alarms from electrical noise\n\n🎯 RECOMMENDATIONS:\n• Electrical noise area? Increase to 4-5\n• Need maximum detection? Use 0-1\n• Default works well for most areas",
+    
+    spike: "⚡ SPIKE REJECTION\n\nFilters out very short, high-amplitude electrical transients that aren't lightning.\n\n📊 VALUE RANGE (0-15):\n• 0: No rejection - detects all spikes (maximum sensitivity)\n• 1-5: Low rejection - good balance\n• 6-11: Moderate rejection - filters some noise\n• 12-15: Maximum rejection - ignores fast transients\n\n🔍 WHAT IT FILTERS:\n• Electronic switching transients (power supplies, relays)\n• Fast electrical pulses from machinery\n• RF noise from WiFi and cell towers\n• NOT actual lightning which has slower rise times\n\n💡 RECOMMENDED VALUES:\n• Clean electrical environment: 0-2\n• Some noise: 3-5 (good default)\n• High noise area: 8-12\n• Industrial area: 12-15\n\n⚠️ NOTE: Setting too high may miss genuine lightning events",
+    
+    strikes: "⚡ MINIMUM LIGHTNING STRIKES\n\nRequires multiple lightning detections before reporting an event.\n\n📊 STRIKE OPTIONS:\n• 1 Strike (Value: 0): Report every detection - maximum sensitivity\n• 5 Strikes (Value: 1): Good balance - medium sensitivity\n• 9 Strikes (Value: 2): Higher threshold - fewer false positives\n• 16 Strikes (Value: 3): Maximum threshold - least sensitive\n\n🎯 HOW IT WORKS:\nThe sensor collects rapid pulses of electromagnetic energy. This setting requires X pulses to confirm a lightning strike.\n\n💡 RECOMMENDED VALUES:\n• Research/testing: Use 1 Strike (maximum sensitivity)\n• General use: Use 5 Strikes (good balance)\n• Noisy environment: Use 9-16 Strikes (reduces false positives)\n• High accuracy needed: Use 9-16 Strikes\n\n⚠️ TRADEOFF:\n• Lower values = detect more distant/weak lightning but more false alarms\n• Higher values = fewer false alarms but might miss weak events",
+    
+    watchdog: "⏱️ WATCHDOG THRESHOLD (0-10)\n\nControls the timeout period after detecting activity.\n\n🔄 WHAT IT DOES:\nAfter the sensor detects lightning or disturber activity, it waits this amount of time before it's ready to report another event.\n\n📊 TIMING SCALE:\n• Value 0: Minimum wait time (~16ms)\n• Value 5: Medium wait time\n• Value 10: Maximum wait time (~288ms)\n\nHigher values give the sensor more time to \"settle\" after detecting an event.\n\n⚙️ PRACTICAL USE:\n• 0-2: Fast response, good for continuous monitoring\n• 3-5: Balanced - prevents rapid re-triggering\n• 6-10: Slow response, filters out multiple pulses\n\n💡 RECOMMENDATIONS:\n• For weather monitoring: Use 3-5\n• For event counting: Use 0-2\n• Noisy environment: Use 5-10\n\n📝 NOTE: Related to internal sensor timing, affects how soon after one event another can be detected",
+    
+    disturber: "🚫 DISTURBER DETECTION\n\nEnables/disables the sensor's ability to distinguish between true lightning and man-made electrical disturbances.\n\n✅ ENABLED:\n• Sensor actively identifies non-lightning disturbances\n• Only reports confirmed lightning events\n• Filters out: power line switching, motor starts, radio transmissions\n• Better accuracy for lightning detection\n• RECOMMENDED for most applications\n\n❌ DISABLED:\n• Reports ALL electromagnetic activity detected\n• Includes both lightning AND man-made disturbances\n• Useful if you need to monitor all electrical activity\n• May generate many false alarms if in noisy area\n\n📊 DETECTION ALGORITHM:\nWhen enabled, the AS3935 analyzes the energy signature and rise time of detected events to separate true lightning (characteristic 10µs+ rise time) from faster switching transients.\n\n💡 WHEN TO USE EACH:\n• Lightning monitoring/weather station: Use ENABLED\n• Research/electrical activity logging: Use DISABLED\n• High noise area: Use ENABLED for better accuracy\n\n⚠️ NOTE: Even with disturber detection enabled, some false positives may occur in electrically noisy environments"
+  };
+
+  // Show setting info modal (global scope for onclick handlers)
+  function showSettingInfo(settingName) {
+    try {
+      const modal = document.getElementById('settings_info_modal');
+      if (!modal) {
+        console.error('Modal element not found:', 'settings_info_modal');
+        return;
+      }
+      const title = modal.querySelector('h2');
+      const content = modal.querySelector('p');
+      if (!title || !content) {
+        console.error('Modal elements not found - title:', title, 'content:', content);
+        return;
+      }
+      title.textContent = 'Setting Information';
+      content.textContent = settingDescriptions[settingName] || 'No information available for this setting.';
+      modal.style.display = 'block';
+      console.log('Showing info for:', settingName);
+    } catch(e) {
+      console.error('Error in showSettingInfo:', e);
+    }
+  }
+  
+  // Expose to global scope for onclick handlers
+  window.showSettingInfo = showSettingInfo;
+
+  // Load advanced settings from NVS into form fields with retry logic
+  async function loadSettings() {
+    const loadingIndicator = document.getElementById('settings_loading_indicator');
+    const defaults = {
+      afe: 18,
+      noise_level: 2,
+      spike_rejection: 2,
+      min_strikes: 0,
+      disturber_enabled: true,
+      watchdog: 2
+    };
+    
+    // Retry function with exponential backoff
+    const fetchWithRetry = async (url, maxRetries = 3) => {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const response = await fetch(url, { timeout: 5000 });
+          if (response.ok) {
+            return await response.json();
+          }
+        } catch (e) {
+          if (i < maxRetries - 1) {
+            // Wait before retrying (100ms, 200ms, 400ms)
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, i)));
+          }
+        }
+      }
+      return null;
+    };
+    
+    try {
+      // Show loading indicator
+      if(loadingIndicator) loadingIndicator.style.display = 'inline';
+      
+      console.log('Starting loadSettings with retry logic...');
+      
+      // Load all settings in PARALLEL for maximum speed - each with retry logic
+      const results = await Promise.allSettled([
+        fetchWithRetry('/api/as3935/settings/afe').then(r => r || {afe: defaults.afe, afe_name: 'INDOOR'}),
+        fetchWithRetry('/api/as3935/settings/noise-level').then(r => r || {noise_level: defaults.noise_level}),
+        fetchWithRetry('/api/as3935/settings/spike-rejection').then(r => r || {spike_rejection: defaults.spike_rejection}),
+        fetchWithRetry('/api/as3935/settings/min-strikes').then(r => r || {min_strikes: defaults.min_strikes}),
+        fetchWithRetry('/api/as3935/settings/watchdog').then(r => r || {watchdog: defaults.watchdog}),
+        fetchWithRetry('/api/as3935/settings/disturber').then(r => r || {disturber_enabled: defaults.disturber_enabled})
+      ]);
+      
+      const [afeResult, noiseResult, spikeResult, strikesResult, watchdogResult, disturberResult] = results;
+      
+      const afe = afeResult.status === 'fulfilled' ? afeResult.value : {afe: defaults.afe, afe_name: 'INDOOR'};
+      const noise = noiseResult.status === 'fulfilled' ? noiseResult.value : {noise_level: defaults.noise_level};
+      const spike = spikeResult.status === 'fulfilled' ? spikeResult.value : {spike_rejection: defaults.spike_rejection};
+      const strikes = strikesResult.status === 'fulfilled' ? strikesResult.value : {min_strikes: defaults.min_strikes};
+      const watchdog = watchdogResult.status === 'fulfilled' ? watchdogResult.value : {watchdog: defaults.watchdog};
+      const disturber = disturberResult.status === 'fulfilled' ? disturberResult.value : {disturber_enabled: defaults.disturber_enabled};
+      
+      console.log('All settings loaded:', {afe, noise, spike, strikes, watchdog, disturber});
+
+      // AFE - Set the select to match the current value
+      if(afe && afe.afe !== undefined) {
+        const afeVal = String(afe.afe);
+        const afeSelect = document.getElementById('as3935_afe');
+        if(afeSelect) {
+          afeSelect.value = afeVal;
+          console.log('✓ AFE set to:', afeVal);
+        } else {
+          console.warn('⚠ AFE select element not found in DOM');
+        }
+      } else {
+        console.warn('AFE not available:', afe);
+      }
+
+      // Noise Level
+      if(noise && noise.noise_level !== undefined) {
+        const noiseVal = String(noise.noise_level);
+        const noiseSelect = document.getElementById('as3935_noise_level');
+        if(noiseSelect) {
+          noiseSelect.value = noiseVal;
+          console.log('✓ Noise level set to:', noiseVal);
+        } else {
+          console.warn('⚠ Noise level element not found in DOM');
+        }
+      } else {
+        console.warn('Noise level not available:', noise);
+      }
+
+      // Spike Rejection
+      if(spike && spike.spike_rejection !== undefined) {
+        const spikeVal = String(spike.spike_rejection);
+        const spikeInput = document.getElementById('as3935_spike_rejection');
+        if(spikeInput) {
+          spikeInput.value = spikeVal;
+          console.log('✓ Spike rejection set to:', spikeVal);
+        } else {
+          console.warn('⚠ Spike rejection element not found in DOM');
+        }
+      } else {
+        console.warn('Spike rejection not available:', spike);
+      }
+
+      // Min Strikes
+      if(strikes && strikes.min_strikes !== undefined) {
+        const strikesVal = String(strikes.min_strikes);
+        const strikesSelect = document.getElementById('as3935_min_strikes');
+        if(strikesSelect) {
+          strikesSelect.value = strikesVal;
+          console.log('✓ Min strikes set to:', strikesVal);
+        } else {
+          console.warn('⚠ Min strikes element not found in DOM');
+        }
+      } else {
+        console.warn('Min strikes not available:', strikes);
+      }
+
+      // Watchdog
+      if(watchdog && watchdog.watchdog !== undefined) {
+        const watchdogVal = String(watchdog.watchdog);
+        const watchdogInput = document.getElementById('as3935_watchdog');
+        if(watchdogInput) {
+          watchdogInput.value = watchdogVal;
+          console.log('✓ Watchdog set to:', watchdogVal);
+        } else {
+          console.warn('⚠ Watchdog element not found in DOM');
+        }
+      } else {
+        console.warn('Watchdog not available:', watchdog);
+      }
+
+      // Disturber Detection
+      if(disturber && disturber.disturber_enabled !== undefined) {
+        const enabled = Boolean(disturber.disturber_enabled);
+        const onBtn = document.getElementById('as3935_disturber_on');
+        const offBtn = document.getElementById('as3935_disturber_off');
+        
+        if(onBtn && offBtn) {
+          console.log('Setting disturber to:', enabled);
+          
+          // Remove all state classes first
+          onBtn.classList.remove('btn-active', 'btn-secondary');
+          offBtn.classList.remove('btn-active', 'btn-secondary');
+          
+          if(enabled) {
+            onBtn.classList.add('btn-active');
+            offBtn.classList.add('btn-secondary');
+            console.log('✓ Disturber: ON is active');
+          } else {
+            offBtn.classList.add('btn-active');
+            onBtn.classList.add('btn-secondary');
+            console.log('✓ Disturber: OFF is active');
+          }
+        } else {
+          console.warn('⚠ Disturber buttons not found in DOM');
+        }
+      } else {
+        console.warn('Disturber not available:', disturber);
+      }
+      
+      console.log('loadSettings completed successfully');
+      
+      // Hide loading indicator
+      if(loadingIndicator) loadingIndicator.style.display = 'none';
+    } catch(e) {
+      console.error('Error loading settings:', e);
+      alert('Error loading settings. Check browser console for details.');
+      
+      // Hide loading indicator on error too
+      if(loadingIndicator) loadingIndicator.style.display = 'none';
+    }
+  }
+
+  async function load(){
+    await updateWiFiStatus();
+    await updateMqttStatus();
+    await scanWiFiNetworks();
+    
+    const s = await jsonReq('/api/as3935/pins/status');
+    if(s){ 
+      document.getElementById('as3935_i2c_port').value = s.i2c_port != null ? s.i2c_port : ''; 
+      document.getElementById('as3935_sda').value = s.sda != null ? s.sda : ''; 
+      document.getElementById('as3935_scl').value = s.scl != null ? s.scl : ''; 
+      document.getElementById('as3935_irq').value = s.irq != null ? s.irq : ''; 
+    }
+    
+    const addr = await jsonReq('/api/as3935/address/status');
+    if(addr) {
+      document.getElementById('as3935_addr').value = addr.i2c_addr || '0x03';
+    }
+    
+    await updateAs3935Status();
+    
+    // Load advanced settings from NVS - start immediately, no delay
+    loadSettings();
+    
+    // Auto-refresh sensor status every 3 seconds
+    setInterval(updateAs3935Status, 3000);
+    
+    // Register all event listeners after DOM is ready
+    registerEventListeners();
+  }
+  
+  function registerEventListeners(){
+    // Helper function for safe element selection
+    const safeId = (id) => {
+      const el = document.getElementById(id);
+      // Silently return null if element not found - the code already checks with if()
+      return el;
+    };
+    
+    try {
+    // WiFi handlers
+    const wifi_pwd_toggle = safeId('wifi_pwd_toggle');
+    if(wifi_pwd_toggle) wifi_pwd_toggle.addEventListener('click', ()=>toggle('wifi_password'));
+    
+    const wifi_scan = safeId('wifi_scan');
+    if(wifi_scan) wifi_scan.addEventListener('click', scanWiFiNetworks);
+  
+    const wifi_ssid_select = safeId('wifi_ssid_select');
+    if(wifi_ssid_select) wifi_ssid_select.addEventListener('change', (e) => {
+      if(e.target.value) {
+        const wifi_ssid_manual = safeId('wifi_ssid_manual');
+        if(wifi_ssid_manual) wifi_ssid_manual.value = '';
+      }
+    });
+  
+    const wifi_ssid_manual = safeId('wifi_ssid_manual');
+    if(wifi_ssid_manual) wifi_ssid_manual.addEventListener('input', (e) => {
+      if(e.target.value) {
+        const wifi_ssid_select = safeId('wifi_ssid_select');
+        if(wifi_ssid_select) wifi_ssid_select.value = '';
+      }
+    });
+
+    const wifi_save = safeId('wifi_save');
+    if(wifi_save) wifi_save.addEventListener('click', async ()=>{
+      const ssid = (safeId('wifi_ssid_select')?.value || '') || (safeId('wifi_ssid_manual')?.value || '');
+      if(!ssid){
+        alert('⚠️ Please select or enter an SSID');
+        return;
+      }
+      const body = { ssid };
+      const pw = safeId('wifi_password')?.value; 
+      if(pw && pw.length) body.password = pw;
+      await fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      alert('✓ Wi-Fi settings saved');
+    });
+
+    const wifi_connect = safeId('wifi_connect');
+    if(wifi_connect) wifi_connect.addEventListener('click', async ()=>{
+      const ssid = (safeId('wifi_ssid_select')?.value || '') || (safeId('wifi_ssid_manual')?.value || '');
+      if(!ssid){
+        alert('⚠️ Please select or enter an SSID');
+        return;
+      }
+      const body = { ssid, connect_now: true };
+      const pw = safeId('wifi_password')?.value; 
+      if(pw && pw.length) body.password = pw;
+      
+      const wifi_status = safeId('wifi_status');
+      if(wifi_status) wifi_status.innerText = 'Connecting...';
+      await fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      
+      // Wait a moment then try to detect new IP
+      setTimeout(async () => {
+        const status = await jsonReq('/api/wifi/status');
+        if(status && status.ip){
+          alert(`✓ Connected!\n\nNew IP: ${status.ip}\n\nRedirecting...`);
+          // Redirect to new IP (if changed)
+          const newUrl = `http://${status.ip.split('.').slice(0,3).join('.')}.${status.ip.split('.')[3]}:80`;
+          setTimeout(() => { window.location.href = newUrl; }, 1000);
+        } else {
+          if(wifi_status) wifi_status.innerText = 'Connection in progress...';
+        }
+      }, 3000);
+    });
+    
+    // MQTT handlers
+    const mqtt_pwd_toggle = safeId('mqtt_pwd_toggle');
+    if(mqtt_pwd_toggle) mqtt_pwd_toggle.addEventListener('click', ()=>toggle('mqtt_password'));
+
+    const mqtt_save = safeId('mqtt_save');
+    if(mqtt_save) mqtt_save.addEventListener('click', async ()=>{
+      const protocol = safeId('mqtt_protocol')?.value;
+      const host = safeId('mqtt_host')?.value;
+      const port = safeId('mqtt_port')?.value;
+      
+      if(!host){
+        alert('⚠️ Broker hostname/IP is required');
+        return;
+      }
+      if(!port){
+        alert('⚠️ Broker port is required');
+        return;
+      }
+      
+      // Construct URI from components
+      const uri = `${protocol}://${host}:${port}`;
+      
+      const body = { 
+        uri,
+        topic: safeId('mqtt_topic')?.value || 'as3935/lightning',
+        availability_topic: safeId('mqtt_availability_topic')?.value || 'as3935/availability',
+        username: safeId('mqtt_username')?.value 
+      };
+      const pw = safeId('mqtt_password')?.value; 
+      if(pw && pw.length) body.password = pw;
+      const ca = safeId('mqtt_ca_cert')?.value;
+      if(ca && ca.length) body.ca_cert = ca;
+      
+      await fetch('/api/mqtt/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const mqtt_pwd_badge = safeId('mqtt_pwd_badge');
+      if(mqtt_pwd_badge) mqtt_pwd_badge.innerText = pw && pw.length ? 'saved':'saved';
+      alert('✓ MQTT settings saved - connecting...');
+      await new Promise(r => setTimeout(r, 1000));
+      await updateMqttStatus();
+    });
+
+    const mqtt_test = safeId('mqtt_test');
+    if(mqtt_test) mqtt_test.addEventListener('click', async ()=>{ 
+      const result = await fetch('/api/mqtt/test',{method:'POST'});
+      const data = await result.json();
+      if(data.ok){
+        alert('✓ Test message published successfully!');
+      } else {
+        let msg = data.error || 'Unknown error';
+        if(data.message) msg += '\n\n' + data.message;
+        if(msg.includes('no_mqtt_broker_configured')) msg = 'MQTT broker is not configured. Please enter a broker URI and save.';
+        if(msg.includes('no_topic_configured')) msg = 'MQTT topic is not configured. A default topic has been set.';
+        if(msg.includes('mqtt_not_connected')) msg = 'MQTT is not connected yet. This is normal if you just configured it. Wait 5-10 seconds and try again.';
+        alert('✗ Test publish failed:\n\n' + msg);
+      }
+    });
+
+    const mqtt_refresh = safeId('mqtt_refresh');
+    if(mqtt_refresh) mqtt_refresh.addEventListener('click', async ()=>{
+      await updateMqttStatus(true);
+    });
+    
+    const mqtt_clear = safeId('mqtt_clear');
+    if(mqtt_clear) mqtt_clear.addEventListener('click', async ()=>{
+      if(!confirm('⚠️ Clear all MQTT settings?')) return;
+      await fetch('/api/mqtt/clear_credentials',{method:'POST'});
+      alert('✓ MQTT settings cleared');
+      await updateMqttStatus();
+    });
+
+    // AS3935 handlers
+    const as3935_save = safeId('as3935_save');
+    if(as3935_save) as3935_save.addEventListener('click', async ()=>{
+      const body = {
+        i2c_port: parseInt(safeId('as3935_i2c_port')?.value) || 0,
+        sda: parseInt(safeId('as3935_sda')?.value) || 21,
+        scl: parseInt(safeId('as3935_scl')?.value) || 22,
+        irq: parseInt(safeId('as3935_irq')?.value) || 0
+      };
+      const result = await fetch('/api/as3935/pins/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(result.ok) {
+        alert('✓ AS3935 pins saved successfully!');
+        await updateAs3935Status();
+      } else {
+        const data = await result.json();
+        alert('✗ Error saving pins:\n' + (data.error || 'Unknown error'));
+      }
+    });
+
+    const as3935_save_addr = safeId('as3935_save_addr');
+    if(as3935_save_addr) as3935_save_addr.addEventListener('click', async ()=>{
+      const addrStr = (safeId('as3935_addr')?.value || '').trim();
+      let i2c_addr = 0x03;  // Default
+      
+      // Parse hex (0x03) or decimal (3) format
+      if(addrStr.startsWith('0x') || addrStr.startsWith('0X')) {
+        i2c_addr = parseInt(addrStr, 16);
+      } else {
+        i2c_addr = parseInt(addrStr, 10);
+      }
+      
+      if(isNaN(i2c_addr) || i2c_addr < 0 || i2c_addr > 255) {
+        alert('⚠️ Invalid address. Use 0x00-0xFF (hex) or 0-255 (decimal)');
+        return;
+      }
+      
+      const body = { i2c_addr };
+      const result = await fetch('/api/as3935/address/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(result.ok) {
+        alert(`✓ AS3935 I2C address saved successfully! (0x${i2c_addr.toString(16).toUpperCase().padStart(2, '0')})`);
+        // Reload address to confirm
+        const addr = await jsonReq('/api/as3935/address/status');
+        if(addr) {
+          const addrField = safeId('as3935_addr');
+          if(addrField) addrField.value = addr.i2c_addr;
+        }
+        await updateAs3935Status();
+      } else {
+        const data = await result.json();
+        alert('✗ Error saving address:\n' + (data.error || 'Unknown error'));
+      }
+    });
+
+    const as3935_status = safeId('as3935_status');
+    if(as3935_status) as3935_status.addEventListener('click', async ()=>{
+      const status = await jsonReq('/api/as3935/status');
+      if(status) {
+        let msg = 'AS3935 Sensor Status\n\n';
+        if(status.initialized === true || status.initialized === 'true') {
+          msg += '✓ Sensor Status: ACTIVE\n';
+          msg += `I2C Address: 0x${status.addr}\n`;
+          msg += `I2C Port: ${status.i2c_port}\n`;
+          msg += `SDA Pin: ${status.sda}\n`;
+          msg += `SCL Pin: ${status.scl}\n`;
+          msg += `IRQ Pin: ${status.irq}\n`;
+          msg += `Verification Register: ${status.verification_register}\n`;
+          msg += `Sensor Handle Valid: ${status.sensor_handle_valid ? 'Yes' : 'No'}`;
+        } else {
+          msg += '✗ Sensor Status: NOT INITIALIZED\n\n';
+          msg += 'The sensor has not been initialized yet.\n';
+          msg += 'Please configure the pin settings and save.';
+        }
+        alert(msg);
+      } else {
+        alert('Unable to fetch AS3935 status');
+      }
+    });
+    
+    const as3935_refresh = safeId('as3935_refresh');
+    if(as3935_refresh) as3935_refresh.addEventListener('click', updateAs3935Status);
+
+    // AS3935 Register Handlers
+    async function loadAllRegisters(){
+      const regs = await jsonReq('/api/as3935/registers/all');
+      if(!regs || regs.registers) {
+        const container = safeId('as3935_registers_container');
+        if(!container) return;
+        container.innerHTML = '';
+        
+        // Register descriptions
+        const regDescriptions = {
+          '0x00': {name: 'AFE Gain', desc: 'Receiver gain control'},
+          '0x01': {name: 'Threshold', desc: 'Lightning detection threshold'},
+          '0x02': {name: 'Config', desc: 'General configuration'},
+          '0x03': {name: 'Status', desc: 'Lightning event status (read-only)'},
+          '0x04': {name: 'L.Eng MSB', desc: 'Lightning energy - MSB'},
+          '0x05': {name: 'L.Eng MID', desc: 'Lightning energy - Middle'},
+          '0x06': {name: 'L.Eng LSB', desc: 'Lightning energy - LSB'},
+          '0x07': {name: 'Calibration', desc: 'RLC calibration'},
+          '0x08': {name: 'Distance', desc: 'Lightning distance (km)'}
+        };
+        
+        // Create a card for each register
+        Object.entries(regs.registers || {}).forEach(([reg, val]) => {
+          const desc = regDescriptions[reg] || {name: reg, desc: ''};
+          const isReadOnly = ['0x03', '0x04', '0x05', '0x06', '0x08'].includes(reg);
+          
+          const card = document.createElement('div');
+          card.style.cssText = 'background:#f9f9f9;padding:10px;border-radius:8px;border-left:3px solid #0d47a1';
+          card.innerHTML = `
+            <div class="label" style="margin-bottom:4px"><strong>${desc.name}</strong></div>
+            <div style="font-size:12px;color:#666;margin-bottom:8px">${desc.desc}</div>
+            <div style="background:white;padding:6px;border-radius:4px;font-family:monospace;font-size:13px;margin-bottom:8px">
+              <strong>Current:</strong> ${val} 
+            </div>
+            ${!isReadOnly ? `
+              <input type="text" class="as3935_reg_input" data-reg="${reg}" placeholder="Hex: 0xFF or Dec: 255" style="font-size:12px;margin-bottom:6px;padding:6px">
+              <button class="as3935_reg_write_btn ghost" data-reg="${reg}" style="width:100%;padding:6px;font-size:12px">Write</button>
+            ` : `<div style="font-size:11px;color:#999;font-style:italic">Read-only register</div>`}
+          `;
+          container.appendChild(card);
+        });
+        
+        // Add event listeners to write buttons
+        document.querySelectorAll('.as3935_reg_write_btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const reg = e.target.dataset.reg;
+            const input = document.querySelector(`.as3935_reg_input[data-reg="${reg}"]`);
+            const val_str = input?.value?.trim();
+            
+            if(!val_str) {
+              alert('⚠️ Please enter a value');
+              return;
+            }
+            
+            let value = parseInt(val_str, 0);  // Auto-detect hex/dec
+            if(isNaN(value) || value < 0 || value > 255) {
+              alert('⚠️ Value must be 0-255 (or 0x00-0xFF in hex)');
+              return;
+            }
+            
+            const result = await fetch('/api/as3935/register/write', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({reg: parseInt(reg, 16), value})
+            });
+            
+            if(result.ok) {
+              const data = await result.json();
+              alert(`✓ Register ${reg} written: ${data.value}`);
+              await loadAllRegisters();  // Refresh display
+            } else {
+              alert('✗ Failed to write register');
+            }
+          });
+        });
+      } else {
+        alert('✗ Failed to load registers');
+      }
+    }
+
+    const as3935_load_all_regs = safeId('as3935_load_all_regs');
+    if(as3935_load_all_regs) as3935_load_all_regs.addEventListener('click', loadAllRegisters);
+
+    const as3935_load_defaults = safeId('as3935_load_defaults');
+    if(as3935_load_defaults) as3935_load_defaults.addEventListener('click', async ()=>{
+      if(!confirm('⚠️ Load AS3935 default settings?')) return;
+      // This would require a separate endpoint to load defaults
+      alert('Note: To load defaults, reconfigure the sensor with default values in the I2C Configuration section.');
+    });
+
+    const as3935_custom_write = safeId('as3935_custom_write');
+    if(as3935_custom_write) as3935_custom_write.addEventListener('click', async ()=>{
+      const reg_str = (safeId('as3935_custom_reg')?.value || '').trim();
+      const val_str = (safeId('as3935_custom_val')?.value || '').trim();
+      
+      if(!reg_str || !val_str) {
+        alert('⚠️ Please enter both register address and value');
+        return;
+      }
+      
+      let reg = parseInt(reg_str, 0);
+      let value = parseInt(val_str, 0);
+      
+      if(isNaN(reg) || reg < 0 || reg > 255 || isNaN(value) || value < 0 || value > 255) {
+        alert('⚠️ Invalid input. Use 0-255 or hex format (0x00-0xFF)');
+        return;
+      }
+      
+      const result = await fetch('/api/as3935/register/write', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reg, value})
+      });
+      
+      if(result.ok) {
+        const data = await result.json();
+        alert(`✓ Register 0x${reg.toString(16).toUpperCase().padStart(2,'0')} = ${data.value}`);
+        const regField = safeId('as3935_custom_reg');
+        const valField = safeId('as3935_custom_val');
+        if(regField) regField.value = '0x00';
+        if(valField) valField.value = '0x00';
+        await updateAs3935Status();
+      } else {
+        const data = await result.json();
+        alert('✗ Failed to write register: ' + (data.error || 'Unknown error'));
+      }
+    });  // Advanced Settings Functions
+
+  async function applySetting(endpoint, fieldName, value) {
+    try {
+      const payload = {};
+      payload[fieldName] = value;
+      
+      const result = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if(result.ok) {
+        const data = await result.json();
+        return true;
+      } else {
+        const data = await result.json();
+        console.error('Failed to update setting:', data);
+        return false;
+      }
+    } catch(e) {
+      console.error('Error updating setting:', e);
+      return false;
+    }
+  }
+
+    // Close modal when clicking outside the content
+    const settings_info_modal = safeId('settings_info_modal');
+    if(settings_info_modal) settings_info_modal.addEventListener('click', (e) => {
+      if(e.target.id === 'settings_info_modal') {
+        e.target.style.display = 'none';
+      }
+    });
+
+    // Advanced Settings Event Listeners
+    const as3935_apply_settings = safeId('as3935_apply_settings');
+    if(as3935_apply_settings) as3935_apply_settings.addEventListener('click', async () => {
+      const afe = safeId('as3935_afe')?.value;
+      const noise = safeId('as3935_noise_level')?.value;
+      const spike = safeId('as3935_spike_rejection')?.value;
+      const strikes = safeId('as3935_min_strikes')?.value;
+      const watchdog = safeId('as3935_watchdog')?.value;
+      const disturberBtn = safeId('as3935_disturber_on');
+      const disturber = disturberBtn?.classList.contains('btn-active') || false;
+
+      let hasError = false;
+
+      if(afe && afe !== '') {
+        if(!await applySetting('/api/as3935/settings/afe', 'afe', parseInt(afe))) {
+          hasError = true;
+        }
+      } else {
+        alert('Please select an Environment Mode');
+        return;
+      }
+
+      if(noise && noise !== '') {
+        if(!await applySetting('/api/as3935/settings/noise-level', 'noise_level', parseInt(noise))) {
+          hasError = true;
+        }
+      } else {
+        alert('Please select a Noise Level');
+        return;
+      }
+
+      if(spike && spike !== '') {
+        if(!await applySetting('/api/as3935/settings/spike-rejection', 'spike_rejection', parseInt(spike))) {
+          hasError = true;
+        }
+      } else {
+        alert('Please enter Spike Rejection value (0-15)');
+        return;
+      }
+
+      if(strikes && strikes !== '') {
+        if(!await applySetting('/api/as3935/settings/min-strikes', 'min_strikes', parseInt(strikes))) {
+          hasError = true;
+        }
+      } else {
+        alert('Please select Min Lightning Strikes');
+        return;
+      }
+
+      if(watchdog && watchdog !== '') {
+        if(!await applySetting('/api/as3935/settings/watchdog', 'watchdog', parseInt(watchdog))) {
+          hasError = true;
+        }
+      } else {
+        alert('Please enter Watchdog Threshold value (0-10)');
+        return;
+      }
+
+      if(!await applySetting('/api/as3935/settings/disturber', 'disturber_enabled', disturber)) {
+        hasError = true;
+      }
+
+      if(!hasError) {
+        alert('✓ All settings updated successfully!');
+        await loadSettings();
+      } else {
+        alert('⚠ Some settings failed to update. Check the console for details.');
+      }
+    });
+
+    const system_reboot = safeId('system_reboot');
+    if(system_reboot) system_reboot.addEventListener('click', () => {
+      if(confirm('Are you sure you want to reboot the device? The web interface will disconnect.')) {
+        fetch('/api/system/reboot', {method: 'POST'})
+          .then(() => {
+            alert('Device is rebooting...');
+            setTimeout(() => {
+              window.location.reload();
+            }, 3000);
+          })
+          .catch(e => alert('Reboot request failed: ' + e.message));
+      }
+    });
+
+    const as3935_disturber_on = safeId('as3935_disturber_on');
+    if(as3935_disturber_on) as3935_disturber_on.addEventListener('click', () => {
+      as3935_disturber_on.classList.add('btn-active');
+      as3935_disturber_on.classList.remove('btn-secondary');
+      const as3935_disturber_off = safeId('as3935_disturber_off');
+      if(as3935_disturber_off) {
+        as3935_disturber_off.classList.remove('btn-active');
+        as3935_disturber_off.classList.add('btn-secondary');
+      }
+    });
+
+    const as3935_disturber_off = safeId('as3935_disturber_off');
+    if(as3935_disturber_off) as3935_disturber_off.addEventListener('click', () => {
+      as3935_disturber_off.classList.add('btn-active');
+      as3935_disturber_off.classList.remove('btn-secondary');
+      const as3935_disturber_on = safeId('as3935_disturber_on');
+      if(as3935_disturber_on) {
+        as3935_disturber_on.classList.remove('btn-active');
+        as3935_disturber_on.classList.add('btn-secondary');
+      }
+    });
+
+    // Load settings on page load
+    window.addEventListener('load', loadSettings);
+
+    const as3935_save_all_regs = safeId('as3935_save_all_regs');
+    if(as3935_save_all_regs) as3935_save_all_regs.addEventListener('click', async ()=>{
+      const regs = await jsonReq('/api/as3935/registers/all');
+      if(regs && regs.registers) {
+        const json = JSON.stringify(regs.registers);
+        const result = await fetch('/api/as3935/config/save', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({config: json})
+        });
+        if(result.ok) {
+          alert('✓ Current register configuration saved to NVS!');
+        } else {
+          alert('✗ Failed to save configuration');
+        }
+      }
+    });
+    } catch(e) {
+      console.error('Error registering event listeners:', e);
+    }
+  }
+  
   document.addEventListener('DOMContentLoaded', load);
-  document.getElementById('wifi_pwd_toggle').addEventListener('click', ()=>toggle('wifi_password'));
-  document.getElementById('mqtt_pwd_toggle').addEventListener('click', ()=>toggle('mqtt_password'));
-
-  document.getElementById('wifi_save').addEventListener('click', async ()=>{
-    const body = { ssid: document.getElementById('wifi_ssid').value };
-    const pw = document.getElementById('wifi_password').value; if(pw && pw.length) body.password = pw;
-    await fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  });
-
-  document.getElementById('wifi_connect').addEventListener('click', async ()=>{
-    const body = { ssid: document.getElementById('wifi_ssid').value };
-    const pw = document.getElementById('wifi_password').value; if(pw && pw.length) body.password = pw; body.connect_now=true;
-    await fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  });
-
-  document.getElementById('mqtt_save').addEventListener('click', async ()=>{
-    const body = { uri: document.getElementById('mqtt_uri').value, topic: document.getElementById('mqtt_topic').value, username: document.getElementById('mqtt_username').value };
-    const pw = document.getElementById('mqtt_password').value; if(pw && pw.length) body.password = pw;
-    await fetch('/api/mqtt/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    setBadge('mqtt_pwd_badge', pw && pw.length ? 'saved':'saved');
-  });
-
-  document.getElementById('mqtt_test').addEventListener('click', async ()=>{ await fetch('/api/mqtt/test',{method:'POST'}); });
 })();
 </script>
 </body>
