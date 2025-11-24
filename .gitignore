@@ -1,0 +1,68 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.map
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+.Python
+venv/
+env/
+*.egg
+
+# Compiler cache
+.cmake/
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles/
+Makefile
+
+# ESP-IDF specific
+sdkconfig.old
+*.log
+.idf_build_monitor_pid
+
+# Partition table
+partition_table/
+
+# Generated files
+web_index.h
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# OS files
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+
+# Unit test / coverage reports
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Dependencies (if using pip locally)
+requirements.txt.lock
