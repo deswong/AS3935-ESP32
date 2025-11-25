@@ -362,6 +362,18 @@
 
 </main>
 <script>
+// Suppress browser extension errors that don't affect our app
+window.addEventListener('unhandledrejection', event => {
+  if (event.reason && (
+    String(event.reason).includes('sentence') ||
+    String(event.reason).includes('contentScript') ||
+    String(event.reason).includes('chrome-extension')
+  )) {
+    console.warn('[Browser extension error suppressed]');
+    event.preventDefault();
+  }
+});
+
 (function(){
   let mqtt_check_interval = null;
   
@@ -568,7 +580,12 @@
     const fetchWithRetry = async (url, maxRetries = 3) => {
       for (let i = 0; i < maxRetries; i++) {
         try {
-          const response = await fetch(url, { timeout: 5000 });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          
           if (response.ok) {
             return await response.json();
           }
@@ -588,106 +605,71 @@
       
       console.log('Starting loadSettings with retry logic...');
       
-      // Load all settings in PARALLEL for maximum speed - each with retry logic
-      const results = await Promise.allSettled([
-        fetchWithRetry('/api/as3935/settings/afe').then(r => r || {afe: defaults.afe, afe_name: 'INDOOR'}),
-        fetchWithRetry('/api/as3935/settings/noise-level').then(r => r || {noise_level: defaults.noise_level}),
-        fetchWithRetry('/api/as3935/settings/spike-rejection').then(r => r || {spike_rejection: defaults.spike_rejection}),
-        fetchWithRetry('/api/as3935/settings/min-strikes').then(r => r || {min_strikes: defaults.min_strikes}),
-        fetchWithRetry('/api/as3935/settings/watchdog').then(r => r || {watchdog: defaults.watchdog}),
-        fetchWithRetry('/api/as3935/settings/disturber').then(r => r || {disturber_enabled: defaults.disturber_enabled})
-      ]);
-      
-      const [afeResult, noiseResult, spikeResult, strikesResult, watchdogResult, disturberResult] = results;
-      
-      const afe = afeResult.status === 'fulfilled' ? afeResult.value : {afe: defaults.afe, afe_name: 'INDOOR'};
-      const noise = noiseResult.status === 'fulfilled' ? noiseResult.value : {noise_level: defaults.noise_level};
-      const spike = spikeResult.status === 'fulfilled' ? spikeResult.value : {spike_rejection: defaults.spike_rejection};
-      const strikes = strikesResult.status === 'fulfilled' ? strikesResult.value : {min_strikes: defaults.min_strikes};
-      const watchdog = watchdogResult.status === 'fulfilled' ? watchdogResult.value : {watchdog: defaults.watchdog};
-      const disturber = disturberResult.status === 'fulfilled' ? disturberResult.value : {disturber_enabled: defaults.disturber_enabled};
-      
-      console.log('All settings loaded:', {afe, noise, spike, strikes, watchdog, disturber});
+      // Load all settings sequentially with null checks to avoid race conditions
+      const afe = await fetchWithRetry('/api/as3935/settings/afe');
+      const noise = await fetchWithRetry('/api/as3935/settings/noise-level');
+      const spike = await fetchWithRetry('/api/as3935/settings/spike-rejection');
+      const strikes = await fetchWithRetry('/api/as3935/settings/min-strikes');
+      const watchdog = await fetchWithRetry('/api/as3935/settings/watchdog');
+      const disturber = await fetchWithRetry('/api/as3935/settings/disturber');
 
       // AFE - Set the select to match the current value
-      if(afe && afe.afe !== undefined) {
-        const afeVal = String(afe.afe);
+      if(afe && (typeof afe.afe !== 'undefined' || typeof afe.afe_name !== 'undefined')) {
+        const afeVal = String(afe.afe || defaults.afe);
         const afeSelect = document.getElementById('as3935_afe');
         if(afeSelect) {
           afeSelect.value = afeVal;
-          console.log('✓ AFE set to:', afeVal);
-        } else {
-          console.warn('⚠ AFE select element not found in DOM');
+          console.log('✓ AFE loaded: ' + afeVal);
         }
-      } else {
-        console.warn('AFE not available:', afe);
       }
 
       // Noise Level
-      if(noise && noise.noise_level !== undefined) {
+      if(noise && typeof noise.noise_level !== 'undefined') {
         const noiseVal = String(noise.noise_level);
         const noiseSelect = document.getElementById('as3935_noise_level');
         if(noiseSelect) {
           noiseSelect.value = noiseVal;
-          console.log('✓ Noise level set to:', noiseVal);
-        } else {
-          console.warn('⚠ Noise level element not found in DOM');
+          console.log('✓ Noise level loaded: ' + noiseVal);
         }
-      } else {
-        console.warn('Noise level not available:', noise);
       }
 
       // Spike Rejection
-      if(spike && spike.spike_rejection !== undefined) {
+      if(spike && typeof spike.spike_rejection !== 'undefined') {
         const spikeVal = String(spike.spike_rejection);
         const spikeInput = document.getElementById('as3935_spike_rejection');
         if(spikeInput) {
           spikeInput.value = spikeVal;
-          console.log('✓ Spike rejection set to:', spikeVal);
-        } else {
-          console.warn('⚠ Spike rejection element not found in DOM');
+          console.log('✓ Spike rejection loaded: ' + spikeVal);
         }
-      } else {
-        console.warn('Spike rejection not available:', spike);
       }
 
       // Min Strikes
-      if(strikes && strikes.min_strikes !== undefined) {
+      if(strikes && typeof strikes.min_strikes !== 'undefined') {
         const strikesVal = String(strikes.min_strikes);
         const strikesSelect = document.getElementById('as3935_min_strikes');
         if(strikesSelect) {
           strikesSelect.value = strikesVal;
-          console.log('✓ Min strikes set to:', strikesVal);
-        } else {
-          console.warn('⚠ Min strikes element not found in DOM');
+          console.log('✓ Min strikes loaded: ' + strikesVal);
         }
-      } else {
-        console.warn('Min strikes not available:', strikes);
       }
 
       // Watchdog
-      if(watchdog && watchdog.watchdog !== undefined) {
+      if(watchdog && typeof watchdog.watchdog !== 'undefined') {
         const watchdogVal = String(watchdog.watchdog);
         const watchdogInput = document.getElementById('as3935_watchdog');
         if(watchdogInput) {
           watchdogInput.value = watchdogVal;
-          console.log('✓ Watchdog set to:', watchdogVal);
-        } else {
-          console.warn('⚠ Watchdog element not found in DOM');
+          console.log('✓ Watchdog loaded: ' + watchdogVal);
         }
-      } else {
-        console.warn('Watchdog not available:', watchdog);
       }
 
       // Disturber Detection
-      if(disturber && disturber.disturber_enabled !== undefined) {
-        const enabled = Boolean(disturber.disturber_enabled);
+      if(disturber && typeof disturber.disturber_enabled !== 'undefined') {
+        const enabled = Boolean(disturber.disturber_enabled === true || disturber.disturber_enabled === 'true' || disturber.disturber_enabled === 1);
         const onBtn = document.getElementById('as3935_disturber_on');
         const offBtn = document.getElementById('as3935_disturber_off');
         
         if(onBtn && offBtn) {
-          console.log('Setting disturber to:', enabled);
-          
           // Remove all state classes first
           onBtn.classList.remove('btn-active', 'btn-secondary');
           offBtn.classList.remove('btn-active', 'btn-secondary');
@@ -695,26 +677,23 @@
           if(enabled) {
             onBtn.classList.add('btn-active');
             offBtn.classList.add('btn-secondary');
-            console.log('✓ Disturber: ON is active');
+            console.log('✓ Disturber loaded: ON');
           } else {
             offBtn.classList.add('btn-active');
             onBtn.classList.add('btn-secondary');
-            console.log('✓ Disturber: OFF is active');
+            console.log('✓ Disturber loaded: OFF');
           }
-        } else {
-          console.warn('⚠ Disturber buttons not found in DOM');
         }
-      } else {
-        console.warn('Disturber not available:', disturber);
       }
       
-      console.log('loadSettings completed successfully');
+      console.log('✓ Settings loaded successfully');
       
       // Hide loading indicator
       if(loadingIndicator) loadingIndicator.style.display = 'none';
     } catch(e) {
       console.error('Error loading settings:', e);
-      alert('Error loading settings. Check browser console for details.');
+      // Don't alert - silently fail and use defaults
+      // alert('Error loading settings. Check browser console for details.');
       
       // Hide loading indicator on error too
       if(loadingIndicator) loadingIndicator.style.display = 'none';
