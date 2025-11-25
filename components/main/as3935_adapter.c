@@ -58,6 +58,16 @@ static as3935_adapter_config_t g_config = {
     .i2c_addr = 0x03
 };
 
+// Cached advanced settings in memory (populated on startup, updated when settings change)
+// These allow fast UI retrieval without NVS reads
+static int g_cached_afe = 18;                      // Default: INDOOR
+static int g_cached_noise_level = 2;               // Default: Medium
+static int g_cached_spike_rejection = 2;           // Default: Low
+static int g_cached_min_strikes = 0;               // Default: 1 strike
+static bool g_cached_disturber_enabled = true;     // Default: ON
+static int g_cached_watchdog = 2;                  // Default: Medium
+static SemaphoreHandle_t g_cached_settings_mutex = NULL;  // Mutex for thread-safe cache access
+
 // Forward declarations
 static esp_err_t as3935_i2c_read_byte_nb(uint8_t reg_addr, uint8_t *value);
 static esp_err_t as3935_i2c_write_byte_nb(uint8_t reg_addr, uint8_t value);
@@ -333,6 +343,19 @@ bool as3935_adapter_bus_init(const as3935_adapter_config_t *cfg) {
         ESP_LOGI(TAG, "[INIT] I2C mutex created for thread-safe I2C operations");
     }
     
+    // Create cache mutex for thread-safe access to cached settings if not already created
+    if (!g_cached_settings_mutex) {
+        g_cached_settings_mutex = xSemaphoreCreateMutex();
+        if (!g_cached_settings_mutex) {
+            ESP_LOGE(TAG, "[INIT] FAILED to create cache mutex");
+            return false;
+        }
+        ESP_LOGI(TAG, "[INIT] Cache mutex created for thread-safe cached settings access");
+        ESP_LOGI(TAG, "[INIT] Cache initialized with defaults: AFE=%d, Noise=%d, Spike=%d, MinStrikes=%d, Disturber=%s, Watchdog=%d",
+                 g_cached_afe, g_cached_noise_level, g_cached_spike_rejection, g_cached_min_strikes,
+                 g_cached_disturber_enabled ? "ON" : "OFF", g_cached_watchdog);
+    }
+    
     g_initialized = true;
     ESP_LOGI(TAG, "AS3935 adapter initialized: i2c_addr=0x%02x, irq_pin=%d",
              cfg->i2c_addr, cfg->irq_pin);
@@ -409,23 +432,55 @@ esp_err_t as3935_init_sensor_handle(int i2c_addr, int irq_pin) {
     // Load and apply saved advanced settings from NVS
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
+    
+    ESP_LOGI(TAG, "[STARTUP] ====== READING ADVANCED SETTINGS FROM NVS ======");
     esp_err_t nvs_err = as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
                                                            &min_strikes, &disturber_enabled, &watchdog);
     
     if (nvs_err == ESP_OK) {
-        ESP_LOGI(TAG, "Applying saved advanced settings: AFE=%d, Noise=%d, Spike=%d, MinStrikes=%d, Disturber=%s, Watchdog=%d",
-                 afe, noise_level, spike_rejection, min_strikes, 
-                 disturber_enabled ? "ON" : "OFF", watchdog);
+        ESP_LOGI(TAG, "[STARTUP] NVS ADVANCED SETTINGS READ SUCCESS");
+        ESP_LOGI(TAG, "[STARTUP]   AFE (Analog Front End): %d (%s)", 
+                 afe, afe == 18 ? "INDOOR/Sensitive" : "OUTDOOR/Less Sensitive");
+        ESP_LOGI(TAG, "[STARTUP]   Noise Level Threshold: %d (0-7)", noise_level);
+        ESP_LOGI(TAG, "[STARTUP]   Spike Rejection: %d (0-15)", spike_rejection);
+        ESP_LOGI(TAG, "[STARTUP]   Min Lightning Strikes: %d (0=1strike, 1=5, 2=9, 3=16)", min_strikes);
+        ESP_LOGI(TAG, "[STARTUP]   Disturber Detection: %s", disturber_enabled ? "ENABLED" : "DISABLED");
+        ESP_LOGI(TAG, "[STARTUP]   Watchdog Threshold: %d (0-10)", watchdog);
         
+        ESP_LOGI(TAG, "[STARTUP] ====== APPLYING ADVANCED SETTINGS TO AS3935 ======");
         esp_err_t apply_err = as3935_apply_advanced_settings(afe, noise_level, spike_rejection, 
                                                              min_strikes, disturber_enabled, watchdog);
         if (apply_err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to apply some advanced settings: %s", esp_err_to_name(apply_err));
+            ESP_LOGW(TAG, "[STARTUP] WARNING: Failed to apply some advanced settings: %s", esp_err_to_name(apply_err));
         } else {
-            ESP_LOGI(TAG, "Advanced settings applied successfully from NVS");
+            ESP_LOGI(TAG, "[STARTUP] SUCCESS: All advanced settings applied to AS3935");
+            ESP_LOGI(TAG, "[STARTUP] Sensor now configured:");
+            ESP_LOGI(TAG, "[STARTUP]   - AFE mode: %d (%s)", 
+                     afe, afe == 18 ? "INDOOR" : "OUTDOOR");
+            ESP_LOGI(TAG, "[STARTUP]   - Noise filtering active at level %d", noise_level);
+            ESP_LOGI(TAG, "[STARTUP]   - Spike rejection at level %d", spike_rejection);
+            ESP_LOGI(TAG, "[STARTUP]   - Min %d lightning strike(s) required", 
+                     min_strikes == 0 ? 1 : (min_strikes == 1 ? 5 : (min_strikes == 2 ? 9 : 16)));
+            ESP_LOGI(TAG, "[STARTUP]   - Disturber detection: %s", 
+                     disturber_enabled ? "ON (detecting non-lightning noise)" : "OFF (only lightning)");
+            ESP_LOGI(TAG, "[STARTUP]   - Watchdog threshold: %d", watchdog);
+        }
+        
+        // Cache the settings in memory for fast UI access
+        if (g_cached_settings_mutex && xSemaphoreTake(g_cached_settings_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            g_cached_afe = afe;
+            g_cached_noise_level = noise_level;
+            g_cached_spike_rejection = spike_rejection;
+            g_cached_min_strikes = min_strikes;
+            g_cached_disturber_enabled = disturber_enabled;
+            g_cached_watchdog = watchdog;
+            xSemaphoreGive(g_cached_settings_mutex);
+            ESP_LOGI(TAG, "[STARTUP] Advanced settings cached in memory for fast UI access");
         }
     } else {
-        ESP_LOGI(TAG, "No saved advanced settings found, sensor using defaults from library init");
+        ESP_LOGI(TAG, "[STARTUP] NO SAVED ADVANCED SETTINGS IN NVS");
+        ESP_LOGI(TAG, "[STARTUP] Sensor will use library defaults from library init");
+        ESP_LOGI(TAG, "[STARTUP] (Users can configure advanced settings via web UI later)");
     }
     
     return ESP_OK;
@@ -464,6 +519,79 @@ bool as3935_setup_irq(int irq_pin) {
     g_config.irq_pin = irq_pin;
     ESP_LOGI(TAG, "IRQ pin configured: %d", irq_pin);
     return true;
+}
+
+/**
+ * @brief Get cached advanced settings (from memory, no NVS access)
+ * This is optimized for fast UI access to current settings
+ * Returns ESP_OK if settings are valid, ESP_ERR_INVALID_STATE if cache not yet initialized
+ */
+esp_err_t as3935_get_cached_advanced_settings(
+    int *afe, int *noise_level, int *spike_rejection,
+    int *min_strikes, bool *disturber_enabled, int *watchdog) {
+    
+    if (!g_cached_settings_mutex) {
+        ESP_LOGW(TAG, "[CACHE-GET] Cache mutex not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Acquire mutex with 500ms timeout for fast UI access
+    if (xSemaphoreTake(g_cached_settings_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        ESP_LOGW(TAG, "[CACHE-GET] Failed to acquire cache mutex");
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    // Copy cached values
+    if (afe) *afe = g_cached_afe;
+    if (noise_level) *noise_level = g_cached_noise_level;
+    if (spike_rejection) *spike_rejection = g_cached_spike_rejection;
+    if (min_strikes) *min_strikes = g_cached_min_strikes;
+    if (disturber_enabled) *disturber_enabled = g_cached_disturber_enabled;
+    if (watchdog) *watchdog = g_cached_watchdog;
+    
+    xSemaphoreGive(g_cached_settings_mutex);
+    
+    ESP_LOGD(TAG, "[CACHE-GET] Retrieved settings from cache: AFE=%d, Noise=%d, Spike=%d, MinStrikes=%d, Disturber=%s, Watchdog=%d",
+             g_cached_afe, g_cached_noise_level, g_cached_spike_rejection, g_cached_min_strikes,
+             g_cached_disturber_enabled ? "ON" : "OFF", g_cached_watchdog);
+    
+    return ESP_OK;
+}
+
+/**
+ * @brief Update cached advanced settings (called after successful sensor application)
+ * This keeps the cache in sync with actual sensor state
+ */
+esp_err_t as3935_update_cached_advanced_settings(
+    int afe, int noise_level, int spike_rejection,
+    int min_strikes, bool disturber_enabled, int watchdog) {
+    
+    if (!g_cached_settings_mutex) {
+        ESP_LOGW(TAG, "[CACHE-UPDATE] Cache mutex not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Acquire mutex with 500ms timeout
+    if (xSemaphoreTake(g_cached_settings_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        ESP_LOGW(TAG, "[CACHE-UPDATE] Failed to acquire cache mutex");
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    // Update cached values
+    g_cached_afe = afe;
+    g_cached_noise_level = noise_level;
+    g_cached_spike_rejection = spike_rejection;
+    g_cached_min_strikes = min_strikes;
+    g_cached_disturber_enabled = disturber_enabled;
+    g_cached_watchdog = watchdog;
+    
+    xSemaphoreGive(g_cached_settings_mutex);
+    
+    ESP_LOGD(TAG, "[CACHE-UPDATE] Updated cache: AFE=%d, Noise=%d, Spike=%d, MinStrikes=%d, Disturber=%s, Watchdog=%d",
+             afe, noise_level, spike_rejection, min_strikes,
+             disturber_enabled ? "ON" : "OFF", watchdog);
+    
+    return ESP_OK;
 }
 
 /**
@@ -557,7 +685,16 @@ bool as3935_init_from_nvs(void) {
         return true;
     }
     
-    return false;
+    // No saved pins - but still initialize adapter and cache with defaults
+    // This ensures the cache is available immediately for HTTP handlers
+    ESP_LOGW(TAG, "No saved pin configuration, initializing adapter with defaults for cache availability");
+    if (!as3935_adapter_bus_init(&g_config)) {
+        ESP_LOGE(TAG, "Failed to initialize adapter with defaults");
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "Adapter initialized with defaults - cache ready for HTTP handlers");
+    return false;  // Still return false to indicate no sensor hardware initialized yet
 }
 
 /**
@@ -722,63 +859,119 @@ esp_err_t as3935_load_advanced_settings_nvs(
     if (disturber_enabled) *disturber_enabled = true;  // Disturber detection ON
     if (watchdog) *watchdog = 2;                // Medium watchdog threshold
     
+    ESP_LOGD(TAG, "[LOAD-NVS] Attempting to read advanced settings from NVS namespace: %s", 
+             NVS_NAMESPACE_AS3935_CFG);
+    
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE_AS3935_CFG, NVS_READONLY, &handle);
     if (err != ESP_OK) {
-        ESP_LOGI(TAG, "No saved advanced settings found, using defaults");
+        ESP_LOGD(TAG, "[LOAD-NVS] NVS namespace not found or empty - using defaults: %s", 
+                 esp_err_to_name(err));
         return ESP_ERR_NVS_NOT_FOUND;  // Not an error, just no saved settings
     }
     
+    ESP_LOGI(TAG, "[LOAD-NVS] NVS namespace '%s' opened successfully, reading individual keys...", 
+             NVS_NAMESPACE_AS3935_CFG);
+    
     int32_t val;
     uint8_t u8_val;
+    int read_count = 0;
     
+    // Load AFE
     if (afe && nvs_get_i32(handle, "afe", &val) == ESP_OK) {
         *afe = (int)val;
         // Validate AFE: must be 18 (INDOOR) or 14 (OUTDOOR)
         if (*afe != 18 && *afe != 14) {
-            ESP_LOGW(TAG, "Invalid AFE value %d in NVS, using default 18 (INDOOR)", *afe);
+            ESP_LOGW(TAG, "[LOAD-NVS] Invalid AFE value %d in NVS, using default 18 (INDOOR)", *afe);
             *afe = 18;
+        } else {
+            ESP_LOGI(TAG, "[LOAD-NVS]   ✓ AFE = %d (%s) from NVS", *afe, *afe == 18 ? "INDOOR" : "OUTDOOR");
+            read_count++;
         }
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   AFE key not found in NVS, using default 18");
     }
+    
+    // Load Noise Level
     if (noise_level && nvs_get_i32(handle, "noise_lvl", &val) == ESP_OK) {
         *noise_level = (int)val;
         // Validate noise level: 0-7
         if (*noise_level < 0 || *noise_level > 7) {
-            ESP_LOGW(TAG, "Invalid noise level %d in NVS, using default 2", *noise_level);
+            ESP_LOGW(TAG, "[LOAD-NVS] Invalid noise level %d in NVS, using default 2", *noise_level);
             *noise_level = 2;
+        } else {
+            ESP_LOGI(TAG, "[LOAD-NVS]   ✓ Noise Level = %d from NVS", *noise_level);
+            read_count++;
         }
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   Noise Level key not found in NVS, using default 2");
     }
+    
+    // Load Spike Rejection
     if (spike_rejection && nvs_get_i32(handle, "spike_rej", &val) == ESP_OK) {
         *spike_rejection = (int)val;
         // Validate spike rejection: 0-15
         if (*spike_rejection < 0 || *spike_rejection > 15) {
-            ESP_LOGW(TAG, "Invalid spike rejection %d in NVS, using default 2", *spike_rejection);
+            ESP_LOGW(TAG, "[LOAD-NVS] Invalid spike rejection %d in NVS, using default 2", *spike_rejection);
             *spike_rejection = 2;
+        } else {
+            ESP_LOGI(TAG, "[LOAD-NVS]   ✓ Spike Rejection = %d from NVS", *spike_rejection);
+            read_count++;
         }
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   Spike Rejection key not found in NVS, using default 2");
     }
+    
+    // Load Min Strikes
     if (min_strikes && nvs_get_i32(handle, "min_strikes", &val) == ESP_OK) {
         *min_strikes = (int)val;
         // Validate min strikes: 0-3
         if (*min_strikes < 0 || *min_strikes > 3) {
-            ESP_LOGW(TAG, "Invalid min strikes %d in NVS, using default 0", *min_strikes);
+            ESP_LOGW(TAG, "[LOAD-NVS] Invalid min strikes %d in NVS, using default 0", *min_strikes);
             *min_strikes = 0;
+        } else {
+            ESP_LOGI(TAG, "[LOAD-NVS]   ✓ Min Strikes = %d from NVS", *min_strikes);
+            read_count++;
         }
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   Min Strikes key not found in NVS, using default 0");
     }
+    
+    // Load Disturber Setting
     if (disturber_enabled && nvs_get_u8(handle, "disturber", &u8_val) == ESP_OK) {
         *disturber_enabled = (u8_val != 0);
+        ESP_LOGI(TAG, "[LOAD-NVS]   ✓ Disturber Detection = %s from NVS", 
+                 *disturber_enabled ? "ENABLED" : "DISABLED");
+        read_count++;
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   Disturber key not found in NVS, using default ENABLED");
     }
+    
+    // Load Watchdog
     if (watchdog && nvs_get_i32(handle, "watchdog", &val) == ESP_OK) {
         *watchdog = (int)val;
         // Validate watchdog: 0-10
         if (*watchdog < 0 || *watchdog > 10) {
-            ESP_LOGW(TAG, "Invalid watchdog %d in NVS, using default 2", *watchdog);
+            ESP_LOGW(TAG, "[LOAD-NVS] Invalid watchdog %d in NVS, using default 2", *watchdog);
             *watchdog = 2;
+        } else {
+            ESP_LOGI(TAG, "[LOAD-NVS]   ✓ Watchdog = %d from NVS", *watchdog);
+            read_count++;
         }
+    } else {
+        ESP_LOGD(TAG, "[LOAD-NVS]   Watchdog key not found in NVS, using default 2");
     }
     
     nvs_close(handle);
-    ESP_LOGI(TAG, "Loaded advanced settings from NVS");
-    return ESP_OK;
+    
+    if (read_count > 0) {
+        ESP_LOGI(TAG, "[LOAD-NVS] Successfully loaded %d settings from NVS namespace '%s'", 
+                 read_count, NVS_NAMESPACE_AS3935_CFG);
+        return ESP_OK;
+    } else {
+        ESP_LOGI(TAG, "[LOAD-NVS] No valid settings found in NVS, using all defaults");
+        return ESP_ERR_NVS_NOT_FOUND;  // Not an error, just no saved settings
+    }
 }
 
 /**
@@ -789,51 +982,88 @@ esp_err_t as3935_apply_advanced_settings(
     int min_strikes, bool disturber_enabled, int watchdog) {
     
     if (!g_sensor_handle) {
-        ESP_LOGW(TAG, "Cannot apply settings - sensor not initialized");
+        ESP_LOGW(TAG, "[APPLY-SETTINGS] Cannot apply settings - sensor not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Starting application of advanced settings to AS3935...");
     esp_err_t err = ESP_OK;
     
     // Apply AFE (Analog Front End)
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying AFE setting: %d (%s)...", 
+             afe, afe == 18 ? "INDOOR" : "OUTDOOR");
     as3935_0x00_register_t reg_0x00;
     err = as3935_get_0x00_register(g_sensor_handle, &reg_0x00);
     if (err == ESP_OK) {
         reg_0x00.bits.analog_frontend = (afe & 0x1F);
         err = as3935_set_0x00_register(g_sensor_handle, reg_0x00);
-        ESP_LOGI(TAG, "Applied AFE: %d", afe);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ AFE applied successfully: %d", afe);
+        } else {
+            ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ AFE failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Failed to read register 0x00 for AFE: %s", esp_err_to_name(err));
     }
     
-    // Apply Noise Level
+    // Apply Noise Level and Watchdog (both in Register 0x01)
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying Noise Level: %d (0-7)...", noise_level);
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying Watchdog Threshold: %d (0-10)...", watchdog);
     as3935_0x01_register_t reg_0x01;
     err = as3935_get_0x01_register(g_sensor_handle, &reg_0x01);
     if (err == ESP_OK) {
         reg_0x01.bits.noise_floor_level = (noise_level & 0x07);
         reg_0x01.bits.watchdog_threshold = (watchdog & 0x0F);
         err = as3935_set_0x01_register(g_sensor_handle, reg_0x01);
-        ESP_LOGI(TAG, "Applied Noise:%d, Watchdog:%d", noise_level, watchdog);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ Noise Level applied: %d", noise_level);
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ Watchdog Threshold applied: %d", watchdog);
+        } else {
+            ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Noise/Watchdog failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Failed to read register 0x01 for Noise/Watchdog: %s", esp_err_to_name(err));
     }
     
-    // Apply Spike Rejection (Register 0x02)
+    // Apply Spike Rejection and Min Strikes (both in Register 0x02)
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying Spike Rejection: %d (0-15)...", spike_rejection);
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying Min Lightning Strikes: %d...", min_strikes);
     as3935_0x02_register_t reg_0x02;
     err = as3935_get_0x02_register(g_sensor_handle, &reg_0x02);
     if (err == ESP_OK) {
         reg_0x02.bits.spike_rejection = (spike_rejection & 0x0F);
         reg_0x02.bits.min_num_lightning = (min_strikes & 0x03);
         err = as3935_set_0x02_register(g_sensor_handle, reg_0x02);
-        ESP_LOGI(TAG, "Applied Spike:%d, Min Strikes:%d", spike_rejection, min_strikes);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ Spike Rejection applied: %d", spike_rejection);
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ Min Lightning Strikes applied: %d", min_strikes);
+        } else {
+            ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Spike/MinStrikes failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Failed to read register 0x02 for Spike/MinStrikes: %s", esp_err_to_name(err));
     }
     
-    // Apply Disturber Detection
+    // Apply Disturber Detection (Register 0x03)
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] Applying Disturber Detection: %s...", 
+             disturber_enabled ? "ENABLED" : "DISABLED");
     as3935_0x03_register_t reg_0x03;
     err = as3935_get_0x03_register(g_sensor_handle, &reg_0x03);
     if (err == ESP_OK) {
         reg_0x03.bits.disturber_detection_state = disturber_enabled ? 
             AS3935_DISTURBER_DETECTION_ENABLED : AS3935_DISTURBER_DETECTION_DISABLED;
         err = as3935_set_0x03_register(g_sensor_handle, reg_0x03);
-        ESP_LOGI(TAG, "Applied Disturber Detection: %s", disturber_enabled ? "ENABLED" : "DISABLED");
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "[APPLY-SETTINGS] ✓ Disturber Detection applied: %s", 
+                     disturber_enabled ? "ENABLED" : "DISABLED");
+        } else {
+            ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Disturber Detection failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(TAG, "[APPLY-SETTINGS] ✗ Failed to read register 0x03 for Disturber: %s", esp_err_to_name(err));
     }
     
+    ESP_LOGI(TAG, "[APPLY-SETTINGS] ====== SETTINGS APPLICATION COMPLETE ======");
     return err;
 }
 
@@ -1474,14 +1704,20 @@ esp_err_t as3935_afe_handler(httpd_req_t *req) {
     
     if (content_len <= 0) {
         ESP_LOGI(TAG, "[AFE-GET] Starting");
-        // GET: return current AFE setting from NVS (or default)
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
-        bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        // GET: return current AFE setting from cache (fast, no NVS access)
+        int afe;
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(&afe, NULL, NULL, NULL, NULL, NULL);
         
-        int afe_value = afe;  // AFE value from NVS
-        ESP_LOGI(TAG, "[AFE-GET] AFE from NVS: %d", afe_value);
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[AFE-GET] Cache access failed, using NVS");
+            int noise_level, spike_rejection, min_strikes, watchdog;
+            bool disturber_enabled;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
+        
+        int afe_value = afe;  // AFE value from cache/NVS
+        ESP_LOGI(TAG, "[AFE-GET] AFE from cache: %d", afe_value);
         snprintf(buf, sizeof(buf), 
             "{\"status\":\"ok\",\"afe\":%d,\"afe_name\":\"%s\"}", 
             afe_value,
@@ -1532,14 +1768,18 @@ esp_err_t as3935_afe_handler(httpd_req_t *req) {
     
     if (err != ESP_OK) return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     
-    // Save to NVS - load current settings, update AFE, save all
+    // Save to NVS - load current settings from cache, update AFE, save all
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     afe = afe_val;  // Update AFE
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"afe\":%d,\"afe_name\":\"%s\"}", 
         afe_val, afe_val == 18 ? "INDOOR" : "OUTDOOR");
@@ -1551,11 +1791,17 @@ esp_err_t as3935_noise_level_handler(httpd_req_t *req) {
     int content_len = req->content_len;
     
     if (content_len <= 0) {
-        // GET: return current noise level from NVS
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
-        bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        // GET: return current noise level from cache (fast, no NVS access)
+        int noise_level;
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(NULL, &noise_level, NULL, NULL, NULL, NULL);
+        
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[NOISE-GET] Cache access failed, using NVS");
+            int afe, spike_rejection, min_strikes, watchdog;
+            bool disturber_enabled;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
         
         snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"noise_level\":%d}", noise_level);
         return http_reply_json(req, buf);
@@ -1601,14 +1847,18 @@ esp_err_t as3935_noise_level_handler(httpd_req_t *req) {
     
     if (err != ESP_OK) return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     
-    // Save to NVS
+    // Save to NVS - load current settings from cache, update noise level
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     noise_level = noise_val;  // Update noise level
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"noise_level\":%d}", noise_val);
     return http_reply_json(req, buf);
@@ -1619,11 +1869,17 @@ esp_err_t as3935_spike_rejection_handler(httpd_req_t *req) {
     int content_len = req->content_len;
     
     if (content_len <= 0) {
-        // GET: return current spike rejection from NVS
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
-        bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        // GET: return current spike rejection from cache (fast, no NVS access)
+        int spike_rejection;
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(NULL, NULL, &spike_rejection, NULL, NULL, NULL);
+        
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[SPIKE-GET] Cache access failed, using NVS");
+            int afe, noise_level, min_strikes, watchdog;
+            bool disturber_enabled;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
         
         snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"spike_rejection\":%d}", spike_rejection);
         return http_reply_json(req, buf);
@@ -1669,14 +1925,18 @@ esp_err_t as3935_spike_rejection_handler(httpd_req_t *req) {
     
     if (err != ESP_OK) return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     
-    // Save to NVS
+    // Save to NVS - load current settings from cache, update spike rejection
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     spike_rejection = spike_val;  // Update spike rejection
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"spike_rejection\":%d}", spike_val);
     return http_reply_json(req, buf);
@@ -1687,11 +1947,17 @@ esp_err_t as3935_min_strikes_handler(httpd_req_t *req) {
     int content_len = req->content_len;
     
     if (content_len <= 0) {
-        // GET: return current min strikes from NVS
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
-        bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        // GET: return current min strikes from cache (fast, no NVS access)
+        int min_strikes;
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(NULL, NULL, NULL, &min_strikes, NULL, NULL);
+        
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[MIN-STRIKES-GET] Cache access failed, using NVS");
+            int afe, noise_level, spike_rejection, watchdog;
+            bool disturber_enabled;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
         
         snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"min_strikes\":%d}", min_strikes);
         return http_reply_json(req, buf);
@@ -1737,14 +2003,18 @@ esp_err_t as3935_min_strikes_handler(httpd_req_t *req) {
     
     if (err != ESP_OK) return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     
-    // Save to NVS
+    // Save to NVS - load current settings from cache, update min strikes
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     min_strikes = strikes_val;  // Update min strikes
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"min_strikes\":%d}", strikes_val);
     return http_reply_json(req, buf);
@@ -1758,13 +2028,18 @@ esp_err_t as3935_disturber_handler(httpd_req_t *req) {
     if (content_len <= 0) {
         ESP_LOGI(TAG, "[DISTURBER] GET request detected");
         
-        // GET: return current disturber setting from NVS
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
+        // GET: return current disturber setting from cache (fast, no NVS access)
         bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(NULL, NULL, NULL, NULL, &disturber_enabled, NULL);
         
-        ESP_LOGI(TAG, "[DISTURBER-GET] Disturber from NVS: %s", disturber_enabled ? "enabled" : "disabled");
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[DISTURBER-GET] Cache access failed, using NVS");
+            int afe, noise_level, spike_rejection, min_strikes, watchdog;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
+        
+        ESP_LOGI(TAG, "[DISTURBER-GET] Disturber from cache: %s", disturber_enabled ? "enabled" : "disabled");
         
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"disturber_enabled\":%s}", 
@@ -1842,14 +2117,18 @@ esp_err_t as3935_disturber_handler(httpd_req_t *req) {
         return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     }
     
-    // Save to NVS
+    // Save to NVS - load current settings from cache, update disturber
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     disturber_enabled = enable;  // Update disturber setting
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"disturber_enabled\":%s}", 
@@ -1864,11 +2143,17 @@ esp_err_t as3935_watchdog_handler(httpd_req_t *req) {
     int content_len = req->content_len;
     
     if (content_len <= 0) {
-        // GET: return current watchdog threshold from NVS
-        int afe, noise_level, spike_rejection, min_strikes, watchdog;
-        bool disturber_enabled;
-        as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                          &min_strikes, &disturber_enabled, &watchdog);
+        // GET: return current watchdog threshold from cache (fast, no NVS access)
+        int watchdog;
+        esp_err_t cache_err = as3935_get_cached_advanced_settings(NULL, NULL, NULL, NULL, NULL, &watchdog);
+        
+        if (cache_err != ESP_OK) {
+            ESP_LOGW(TAG, "[WATCHDOG-GET] Cache access failed, using NVS");
+            int afe, noise_level, spike_rejection, min_strikes;
+            bool disturber_enabled;
+            as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
+                                              &min_strikes, &disturber_enabled, &watchdog);
+        }
         
         snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"watchdog\":%d}", watchdog);
         return http_reply_json(req, buf);
@@ -1914,14 +2199,18 @@ esp_err_t as3935_watchdog_handler(httpd_req_t *req) {
     
     if (err != ESP_OK) return http_reply_json(req, "{\"status\":\"error\",\"msg\":\"set_failed\"}");
     
-    // Save to NVS
+    // Save to NVS - load current settings from cache, update watchdog
     int afe, noise_level, spike_rejection, min_strikes, watchdog;
     bool disturber_enabled;
-    as3935_load_advanced_settings_nvs(&afe, &noise_level, &spike_rejection, 
-                                      &min_strikes, &disturber_enabled, &watchdog);
+    as3935_get_cached_advanced_settings(&afe, &noise_level, &spike_rejection, 
+                                        &min_strikes, &disturber_enabled, &watchdog);
     watchdog = wd_val;  // Update watchdog
     as3935_save_advanced_settings_nvs(afe, noise_level, spike_rejection, 
                                       min_strikes, disturber_enabled, watchdog);
+    
+    // Update cache with new value
+    as3935_update_cached_advanced_settings(afe, noise_level, spike_rejection,
+                                           min_strikes, disturber_enabled, watchdog);
     
     snprintf(buf, sizeof(buf), "{\"status\":\"ok\",\"watchdog\":%d}", wd_val);
     return http_reply_json(req, buf);
