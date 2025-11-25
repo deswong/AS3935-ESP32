@@ -66,6 +66,24 @@ void as3935_set_event_callback(as3935_event_cb_t cb);
 bool as3935_setup_irq(int irq_pin);
 
 /**
+ * @brief Get cached advanced settings (from memory, no NVS access)
+ * This is optimized for fast UI access to current settings
+ * @return ESP_OK if settings retrieved successfully
+ */
+esp_err_t as3935_get_cached_advanced_settings(
+    int *afe, int *noise_level, int *spike_rejection,
+    int *min_strikes, bool *disturber_enabled, int *watchdog);
+
+/**
+ * @brief Update cached advanced settings (called after successful sensor application)
+ * This keeps the cache in sync with actual sensor state
+ * @return ESP_OK if cache updated successfully
+ */
+esp_err_t as3935_update_cached_advanced_settings(
+    int afe, int noise_level, int spike_rejection,
+    int min_strikes, bool disturber_enabled, int watchdog);
+
+/**
  * @brief Apply register configuration from JSON string
  */
 bool as3935_apply_config_json(const char *json);

@@ -9,6 +9,6 @@
   "idf.monitorPort": "COM12",
   "idf.espIdfPathWin": "C:\\Users\\Des\\esp\\v6.0\\esp-idf",
   "idf.toolsPathWin": "C:\\Users\\Des\\.espressif",
-  "idf.pythonInstallPath": "/usr/bin/python3",
+  "idf.pythonInstallPath": "C:\\Users\\Des\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
   "idf.flashType": "UART"
 }
