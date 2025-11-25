@@ -52,9 +52,9 @@ static as3935_event_cb_t g_event_callback = NULL;
 // Configuration
 static as3935_adapter_config_t g_config = {
     .i2c_port = 0,
-    .sda_pin = 21,
-    .scl_pin = 22,
-    .irq_pin = 23,
+    .sda_pin = 7,
+    .scl_pin = 4,
+    .irq_pin = 0,
     .i2c_addr = 0x03
 };
 
@@ -492,9 +492,9 @@ esp_err_t as3935_init_sensor_handle(int i2c_addr, int irq_pin) {
 bool as3935_configure_default(void) {
     as3935_adapter_config_t cfg = {
         .i2c_port = 0,
-        .sda_pin = 21,
-        .scl_pin = 22,
-        .irq_pin = 23,
+        .sda_pin = 7,
+        .scl_pin = 4,
+        .irq_pin = 0,
         .i2c_addr = 0x03
     };
     return as3935_adapter_bus_init(&cfg);
