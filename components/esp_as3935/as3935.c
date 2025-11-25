@@ -541,6 +541,9 @@ esp_err_t as3935_setup(as3935_handle_t handle) {
 
     ESP_ARG_CHECK( dev );
 
+    /* enable sensor power - CRITICAL: sensor must be powered on to function */
+    ESP_ERROR_CHECK( as3935_enable_power(handle) );
+
     /* set noise level threshold */
     ESP_ERROR_CHECK( as3935_set_noise_floor_threshold(handle, dev->config.noise_level_threshold) );
 
