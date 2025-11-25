@@ -8,7 +8,7 @@ This is the first stable release of the AS3935 Lightning Monitor firmware. The s
 
 **Release Date:** November 2025  
 **Status:** Stable, production-ready  
-**ESP-IDF Support:** 5.x and 6.x
+**ESP-IDF Support:** 6.x
 
 ## Features
 
