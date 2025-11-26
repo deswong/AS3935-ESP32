@@ -1120,7 +1120,7 @@ esp_err_t as3935_save_handler(httpd_req_t *req) {
 }
 
 esp_err_t as3935_status_handler(httpd_req_t *req) {
-    char buf[1024];
+    char buf[2048];  // Increased size for detailed diagnostics
     bool sensor_ok = g_initialized && (g_i2c_bus != NULL) && (g_sensor_handle != NULL) && (g_monitor_handle != NULL);
     
     const char *sensor_status = sensor_ok ? "connected" : "disconnected";
@@ -1134,25 +1134,67 @@ esp_err_t as3935_status_handler(httpd_req_t *req) {
     as3935_i2c_read_byte_nb(0x03, &r3);
     as3935_i2c_read_byte_nb(0x08, &r8);
     
+    // Analyze register bits for interrupt configuration
+    bool irq_enabled = (r0 & 0x80) != 0;  // Bit 7 of R0 = PWD (power down), 0 = powered
+    bool disturber_detection = (r3 & 0x20) == 0;  // Bit 5 of R3 = disturber mask (0 = enabled)
+    int noise_level = (r1 & 0x70) >> 4;  // Bits 6-4 of R1 = noise level
+    int afe = (r0 & 0x3E) >> 1;  // Bits 5-1 of R0 = AFE setting
+    
+    // Log detailed diagnostic info
+    ESP_LOGI(TAG, "=== INTERRUPT DIAGNOSTIC INFO ===");
+    ESP_LOGI(TAG, "Sensor Status: %s", sensor_status);
+    ESP_LOGI(TAG, "Powered ON: %s (R0 bit 7 = %d)", irq_enabled ? "NO (powered down)" : "YES", (r0 >> 7) & 1);
+    ESP_LOGI(TAG, "Disturber Detection: %s (R3 bit 5 = %d)", disturber_detection ? "ENABLED" : "DISABLED", (r3 >> 5) & 1);
+    ESP_LOGI(TAG, "Noise Level: %d", noise_level);
+    ESP_LOGI(TAG, "AFE Setting: %d", afe);
+    ESP_LOGI(TAG, "Monitor Handle: %s", (g_monitor_handle != NULL) ? "VALID" : "NULL (interrupts won't work!)");
+    ESP_LOGI(TAG, "Register Values: R0=0x%02x, R1=0x%02x, R3=0x%02x, R8=0x%02x", r0, r1, r3, r8);
+    ESP_LOGI(TAG, "Cached Settings: AFE=%d, Noise=%d, Spike=%d, MinStrikes=%d, Disturber=%s, Watchdog=%d",
+             g_cached_afe, g_cached_noise_level, g_cached_spike_rejection, g_cached_min_strikes,
+             g_cached_disturber_enabled ? "ON" : "OFF", g_cached_watchdog);
+    ESP_LOGI(TAG, "================================");
+    
     snprintf(buf, sizeof(buf), 
         "{\"initialized\":%s,"
         "\"sensor_status\":\"%s\","
         "\"sensor_handle_valid\":%s,"
+        "\"monitor_handle_valid\":%s,"
         "\"i2c_port\":%d,"
         "\"sda\":%d,"
         "\"scl\":%d,"
-        "\"irq\":%d,"
+        "\"irq_pin\":%d,"
         "\"addr\":\"0x%02x\","
         "\"verification_register\":\"0x%02x\","
-        "\"r0\":\"0x%02x\","
-        "\"r1\":\"0x%02x\","
-        "\"r3\":\"0x%02x\","
-        "\"r8\":\"0x%02x\"}",
+        "\"registers\":{"
+        "\"r0\":\"0x%02x\",\"r1\":\"0x%02x\",\"r3\":\"0x%02x\",\"r8\":\"0x%02x\"},"
+        "\"interrupt_diagnostics\":{"
+        "\"powered_on\":%s,"
+        "\"disturber_detection_enabled\":%s,"
+        "\"noise_level\":%d,"
+        "\"afe_setting\":%d,"
+        "\"r0_power_bit_7\":%s,"
+        "\"r3_disturber_bit_5\":%s},"
+        "\"cached_settings\":{"
+        "\"afe\":%d,"
+        "\"noise_level\":%d,"
+        "\"spike_rejection\":%d,"
+        "\"min_strikes\":%d,"
+        "\"disturber_enabled\":%s,"
+        "\"watchdog\":%d}}",
         g_initialized ? "true" : "false",
         sensor_status,
         (g_sensor_handle != NULL) ? "true" : "false",
+        (g_monitor_handle != NULL) ? "true" : "false",
         g_config.i2c_port, g_config.sda_pin, g_config.scl_pin, 
-        g_config.irq_pin, g_config.i2c_addr, r0, r0, r1, r3, r8);
+        g_config.irq_pin, g_config.i2c_addr, r0,
+        r0, r1, r3, r8,
+        irq_enabled ? "false" : "true",  // Bit 7 = 0 means powered ON
+        disturber_detection ? "true" : "false",  // Bit 5 = 0 means enabled
+        noise_level, afe,
+        irq_enabled ? "false (PWD=1, powered down)" : "true (PWD=0, powered on)",
+        disturber_detection ? "true (bit 5 = 0)" : "false (bit 5 = 1)",
+        g_cached_afe, g_cached_noise_level, g_cached_spike_rejection, 
+        g_cached_min_strikes, g_cached_disturber_enabled ? "true" : "false", g_cached_watchdog);
     return http_reply_json(req, buf);
 }
 
